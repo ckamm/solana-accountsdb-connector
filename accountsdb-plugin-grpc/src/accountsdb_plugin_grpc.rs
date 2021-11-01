@@ -77,6 +77,7 @@ pub mod accountsdb_service {
 
 #[derive(Default)]
 pub struct AccountsDbPluginGrpc {
+    runtime: Option<tokio::runtime::Runtime>,
     server_broadcast: Option<broadcast::Sender<Update>>,
     server_exit_sender: Option<oneshot::Sender<()>>,
     accounts_selector: Option<AccountsSelector>,
@@ -148,11 +149,13 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
         self.server_broadcast = Some(service.sender.clone());
 
         let server = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
-        tokio::spawn(
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.spawn(
             Server::builder()
                 .add_service(server)
                 .serve_with_shutdown(addr, exit_receiver.map(drop)),
         );
+        self.runtime = Some(rt);
 
         Ok(())
     }
@@ -270,6 +273,7 @@ impl AccountsDbPluginGrpc {
 
     pub fn new() -> Self {
         AccountsDbPluginGrpc {
+            runtime: None,
             server_broadcast: None,
             server_exit_sender: None,
             accounts_selector: None,
