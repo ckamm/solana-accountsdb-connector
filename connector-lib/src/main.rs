@@ -656,11 +656,22 @@ async fn main() {
             }
             accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
                 println!("slot update");
+                use accountsdb_proto::slot_update::Status;
+                let status_string = match Status::from_i32(update.status) {
+                    Some(Status::Processed) => "processed",
+                    Some(Status::Confirmed) => "confirmed",
+                    Some(Status::Rooted) => "rooted",
+                    None => "",
+                };
+                if status_string == "" {
+                    error!("unexpected slot status: {}", update.status);
+                    continue;
+                }
                 slot_queue_sender
                     .send(SlotUpdate {
                         slot: update.slot as i64, // TODO: narrowing
                         parent: update.parent.map(|v| v as i64),
-                        status: "bla".into(),
+                        status: status_string.into(),
                     })
                     .unwrap();
             },
