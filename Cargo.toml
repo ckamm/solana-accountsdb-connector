@@ -1,0 +1,20 @@
+[workspace]
+members = [
+        "accountsdb-plugin-grpc",
+        "connector-lib",
+]
+
+
+[patch.crates-io]
+# for gzip encoded responses
+jsonrpc-core-client = { path = "../jsonrpc-dep/core-client" }
+
+#solana-accountsdb-plugin-interface = { path = "../solana-accountsdb/accountsdb-plugin-interface" }
+#solana-logger = { path = "../solana-accountsdb/logger" }
+#solana-metrics = { path = "../solana-accountsdb/metrics" }
+#solana-sdk = { path = "../solana-accountsdb/sdk" }
+#solana-program = { path = "../solana-accountsdb/sdk/program" }
+#anchor-lang = { path = "../anchor/lang" } # armani/solana branch for 1.8
+
+#mango = { path = "../mango-v3-dep/program" }
+

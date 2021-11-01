@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "mango.v3.accountsdb";
+option java_outer_classname = "AccountsDbProto";
+
+package accountsdb;
+
+service AccountsDb {
+  rpc Subscribe(SubscribeRequest) returns (stream Update) {}
+}
+
+message SubscribeRequest {
+}
+
+message Update {
+  oneof update_oneof {
+    AccountWrite account_write = 1;
+    SlotUpdate slot_update = 2;
+  }
+}
+
+message AccountWrite {
+  uint64 slot = 1;
+  bytes pubkey = 2;
+  uint64 lamports = 3;
+  bytes owner = 4;
+  bool executable = 5;
+  uint64 rent_epoch = 6;
+  bytes data = 7;
+  uint64 write_version = 8;
+  bool is_startup = 9;
+}
+
+message SlotUpdate {
+  uint64 slot = 1;
+  optional uint64 parent = 2;
+  enum Status {
+    PROCESSED = 0;
+    ROOTED = 1;
+    CONFIRMED = 2;
+  }
+  Status status = 3;
+}
+

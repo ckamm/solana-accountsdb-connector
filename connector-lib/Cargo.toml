@@ -1,0 +1,40 @@
+[package]
+name = "solana-accountsdb-connector-lib"
+version = "0.1.0"
+authors = ["Christian Kamm <ckamm@delightful-solutions.de>"]
+edition = "2018"
+
+[dependencies]
+jsonrpc-core = "18.0.0"
+jsonrpc-derive = "18.0.0"
+jsonrpc-http-server = "18.0.0"
+jsonrpc-core-client = { version = "18.0.0", features = ["ws", "http"] }
+
+solana-rpc = "=1.8.2"
+solana-client = "=1.8.2"
+solana-account-decoder = "1.8.2"
+solana-sdk = "^1.7.10"
+
+hyper = { version = "0.14", features = ["client", "http1"] }
+hyper-tls = { version = "0.5" }
+tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7.4"
+tokio-stream = "0.1"
+postgres_query = { git = "https://github.com/nolanderc/rust-postgres-query", rev = "b4422051c8a31fbba4a35f88004c1cefb1878dd5" }
+
+tonic = "0.6"
+fixed = { version = "=1.9.0", features = ["serde"] }
+serde = "^1.0.118"
+bs58 = "0.3.1"
+futures = "0.3.17"
+log = "0.4"
+prost = "0.9"
+futures-core = "0.3"
+futures-util = "0.3"
+async-stream = "0.2"
+rand = "0.7"
+anyhow = "1.0"
+
+[build-dependencies]
+tonic-build = "0.6"
+
