@@ -65,10 +65,8 @@ pub mod accountsdb_service {
                         Status::new(Code::Internal, err.to_string())
                     });
                     if let Err(err) = tx.send(fwd).await {
-                        warn!(
-                            "error while sending message to subscriber stream: {:?}",
-                            err
-                        );
+                        info!("subscriber stream closed");
+                        exit = true;
                     }
                 }
             });
