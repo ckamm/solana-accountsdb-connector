@@ -511,7 +511,9 @@ fn init_postgres(
                     let query = query!(" \
                         DELETE FROM account_write \
                         USING ( \
-                            SELECT DISTINCT ON(pubkey) pubkey, slot, write_version FROM account_write \
+                            SELECT DISTINCT ON(pubkey) pubkey, slot, write_version \
+                            FROM account_write \
+                            INNER JOIN slot USING(slot) \
                             WHERE slot <= $newest_final_slot AND status = 'rooted' \
                             ORDER BY pubkey, slot DESC, write_version DESC \
                             ) latest_write \
