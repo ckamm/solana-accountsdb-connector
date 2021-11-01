@@ -1,20 +1,15 @@
-use futures_core::Stream;
-use std::pin::Pin;
-use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
-use tonic::{Request, Response, Status};
 
 pub mod accountsdb_proto {
     tonic::include_proto!("accountsdb");
 }
-use accountsdb_proto::{update::UpdateOneof, AccountWrite, SlotUpdate, SubscribeRequest, Update};
+use accountsdb_proto::{update::UpdateOneof, SlotUpdate, SubscribeRequest, Update};
 
 pub mod accountsdb_service {
     use super::*;
     use {
-        accountsdb_proto::accounts_db_server::{AccountsDb, AccountsDbServer},
+        accountsdb_proto::accounts_db_server::AccountsDb,
         tokio_stream::wrappers::ReceiverStream,
         tonic::{Request, Response, Status},
     };

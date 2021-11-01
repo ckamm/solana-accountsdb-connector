@@ -1,42 +1,20 @@
-use jsonrpc_core::futures::StreamExt;
-use jsonrpc_core_client::transports::{http, ws};
-use jsonrpc_derive::rpc;
-use jsonrpc_http_server::ServerBuilder;
-
-use solana_account_decoder::UiAccountEncoding;
-use solana_client::{
-    rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig},
-    rpc_filter::RpcFilterType,
-    rpc_response::{Response, RpcKeyedAccount},
-};
-use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext, rpc_pubsub::RpcSolPubSubClient};
-use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
+mod grpc_plugin_source;
+mod websocket_source;
 
 //use solana_program::account_info::AccountInfo;
 //use mango::state::{MangoAccount, MangoCache, MangoGroup};
 
-use fixed::types::I80F48;
-use futures::FutureExt;
+use solana_sdk::pubkey::Pubkey;
+
 use log::{error, info, trace, warn};
 use postgres_query::{query, FromSqlRow};
-use serde::{Deserialize, Serialize};
 use std::{
     cmp::max,
-    collections::{HashMap, HashSet, VecDeque},
-    mem::size_of,
+    collections::HashMap,
     ops::Deref,
-    rc::Rc,
-    str::FromStr,
     sync::{mpsc, Arc, RwLock},
-    thread::sleep,
     time::{Duration, Instant},
 };
-use tokio::{runtime::Runtime, time};
-
-pub mod accountsdb_proto {
-    tonic::include_proto!("accountsdb");
-}
-use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
 struct SimpleLogger;
 impl log::Log for SimpleLogger {
@@ -148,12 +126,6 @@ async fn update_mango_data(mango_data: Arc<RwLock<MangoData>>) {
 // main etc.
 //
 
-enum WebsocketMessage {
-    SingleUpdate(Response<RpcKeyedAccount>),
-    SnapshotUpdate(Response<Vec<RpcKeyedAccount>>),
-    SlotUpdate(Arc<solana_client::rpc_response::SlotUpdate>),
-}
-
 trait AnyhowWrap {
     type Value;
     fn map_err_anyhow(self) -> anyhow::Result<Self::Value>;
@@ -163,157 +135,6 @@ impl<T, E: std::fmt::Debug> AnyhowWrap for Result<T, E> {
     type Value = T;
     fn map_err_anyhow(self) -> anyhow::Result<Self::Value> {
         self.map_err(|err| anyhow::anyhow!("{:?}", err))
-    }
-}
-
-async fn feed_data(sender: mpsc::Sender<WebsocketMessage>) -> Result<(), anyhow::Error> {
-    let rpc_pubsub_url = "";
-    let rpc_http_url = "";
-    let program_id = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68")?;
-    let mango_group_address = Pubkey::from_str("98pjRuQjK3qA6gXts96PqZT4Ze5QmnCmt3QYjhbUSPue")?;
-    let snapshot_duration = Duration::from_secs(300);
-
-    let connect = ws::try_connect::<RpcSolPubSubClient>(&rpc_pubsub_url).map_err_anyhow()?;
-    let client = connect.await.map_err_anyhow()?;
-
-    let rpc_client = http::connect_with_options::<FullClient>(&rpc_http_url, true)
-        .await
-        .map_err_anyhow()?;
-
-    let account_info_config = RpcAccountInfoConfig {
-        encoding: Some(UiAccountEncoding::Base64),
-        commitment: Some(CommitmentConfig::processed()),
-        data_slice: None,
-    };
-    // TODO: Make addresses filters configurable
-    let program_accounts_config = RpcProgramAccountsConfig {
-        filters: None, /*Some(vec![RpcFilterType::DataSize(
-                           size_of::<MangoAccount>() as u64
-                       )]),*/
-        with_context: Some(true),
-        account_config: account_info_config.clone(),
-    };
-
-    let mut update_sub = client
-        .program_subscribe(
-            program_id.to_string(),
-            Some(program_accounts_config.clone()),
-        )
-        .map_err_anyhow()?;
-    let mut slot_sub = client.slots_updates_subscribe().map_err_anyhow()?;
-
-    let mut last_snapshot = Instant::now() - snapshot_duration;
-
-    loop {
-        // occasionally cause a new snapshot to be produced
-        // including the first time
-        if last_snapshot + snapshot_duration <= Instant::now() {
-            let account_snapshot = rpc_client
-                .get_program_accounts(
-                    program_id.to_string(),
-                    Some(program_accounts_config.clone()),
-                )
-                .await
-                .map_err_anyhow()?;
-            if let OptionalContext::Context(account_snapshot_response) = account_snapshot {
-                sender
-                    .send(WebsocketMessage::SnapshotUpdate(account_snapshot_response))
-                    .expect("sending must succeed");
-            }
-            last_snapshot = Instant::now();
-        }
-
-        tokio::select! {
-            account = update_sub.next() => {
-                match account {
-                    Some(account) => {
-                        sender.send(WebsocketMessage::SingleUpdate(account.map_err_anyhow()?)).expect("sending must succeed");
-                    },
-                    None => {
-                        warn!("account stream closed");
-                        return Ok(());
-                    },
-                }
-            },
-            slot_update = slot_sub.next() => {
-                match slot_update {
-                    Some(slot_update) => {
-                        sender.send(WebsocketMessage::SlotUpdate(slot_update.map_err_anyhow()?)).expect("sending must succeed");
-                    },
-                    None => {
-                        warn!("slot update stream closed");
-                        return Ok(());
-                    },
-                }
-            },
-            _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                warn!("websocket timeout");
-                return Ok(())
-            }
-        }
-    }
-}
-
-async fn feed_data_accountsdb(
-    sender: mpsc::Sender<accountsdb_proto::Update>,
-) -> Result<(), anyhow::Error> {
-    let rpc_http_url = "";
-
-    let mut client = AccountsDbClient::connect("http://[::1]:10000").await?;
-
-    let mut update_stream = client
-        .subscribe(accountsdb_proto::SubscribeRequest {})
-        .await?
-        .into_inner();
-
-    let rpc_client = http::connect_with_options::<FullClient>(&rpc_http_url, true)
-        .await
-        .map_err_anyhow()?;
-
-    let program_id = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68")?;
-    let account_info_config = RpcAccountInfoConfig {
-        encoding: Some(UiAccountEncoding::Base64),
-        commitment: Some(CommitmentConfig::processed()),
-        data_slice: None,
-    };
-    // TODO: Make addresses filters configurable
-    let program_accounts_config = RpcProgramAccountsConfig {
-        filters: None, /*Some(vec![RpcFilterType::DataSize(
-                           size_of::<MangoAccount>() as u64
-                       )]),*/
-        with_context: Some(true),
-        account_config: account_info_config.clone(),
-    };
-
-    // Get an account snapshot on start
-    let account_snapshot = rpc_client
-        .get_program_accounts(
-            program_id.to_string(),
-            Some(program_accounts_config.clone()),
-        )
-        .await
-        .map_err_anyhow()?;
-    if let OptionalContext::Context(account_snapshot_response) = account_snapshot {
-        // TODO: send the snapshot data through the sender
-        error!("Missing initial snapshot");
-    }
-
-    loop {
-        tokio::select! {
-            update = update_stream.next() => {
-                match update {
-                    Some(update) => {
-                        sender.send(update?).expect("sending must succeed");
-                    },
-                    None => {
-                        anyhow::bail!("accountsdb plugin has closed the stream");
-                    },
-                }
-            },
-            _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                anyhow::bail!("accountsdb plugin hasn't sent a message in too long");
-            }
-        }
     }
 }
 
@@ -329,26 +150,11 @@ pub struct AccountWrite {
     pub data: Vec<u8>,
 }
 
-impl AccountWrite {
-    fn from(pubkey: Pubkey, slot: u64, write_version: i64, account: Account) -> AccountWrite {
-        AccountWrite {
-            pubkey,
-            slot: slot as i64, // TODO: narrowing!
-            write_version,
-            lamports: account.lamports as i64, // TODO: narrowing!
-            owner: account.owner,
-            executable: account.executable,
-            rent_epoch: account.rent_epoch as i64, // TODO: narrowing!
-            data: account.data.clone(),
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Debug)]
-struct SlotUpdate {
-    slot: i64,
-    parent: Option<i64>,
-    status: String,
+pub struct SlotUpdate {
+    pub slot: i64,
+    pub parent: Option<i64>,
+    pub status: String,
 }
 
 fn init_postgres(
@@ -479,7 +285,7 @@ fn init_postgres(
                     ON CONFLICT (slot) DO UPDATE SET \
                         parent=$parent, status=$status",
                     slot = update.slot,
-                    parent = update.parent,
+                    parent = parent,
                     status = update.status,
                 );
                 let result = query.execute(client).await.unwrap();
@@ -611,153 +417,11 @@ async fn main() {
     let (account_write_queue_sender, slot_queue_sender) =
         init_postgres(postgres_connection_string.into());
 
-    /*
-    sleep(Duration::from_secs(1));
+    let use_accountsdb = true;
 
-    slot_queue_sender.send(SlotUpdate { slot: 1000, parent: 999, status: "processed".into() }).unwrap();
-    slot_queue_sender.send(SlotUpdate { slot: 1001, parent: 1000, status: "processed".into() }).unwrap();
-    slot_queue_sender.send(SlotUpdate { slot: 1002, parent: 1001, status: "processed".into() }).unwrap();
-    slot_queue_sender.send(SlotUpdate { slot: 1003, parent: 1001, status: "processed".into() }).unwrap();
-    slot_queue_sender.send(SlotUpdate { slot: 1004, parent: 1002, status: "processed".into() }).unwrap();
-    slot_queue_sender.send(SlotUpdate { slot: 1000, parent: 999, status: "rooted".into() }).unwrap();
-    */
-
-    // Subscribe to accountsdb
-    let (update_sender, update_receiver) = mpsc::channel::<accountsdb_proto::Update>();
-    tokio::spawn(async move {
-        // Continuously reconnect on failure
-        loop {
-            let out = feed_data_accountsdb(update_sender.clone());
-            let result = out.await;
-            assert!(result.is_err());
-            if let Err(err) = result {
-                warn!(
-                    "error during communication with the accountsdb plugin. retrying. {:?}",
-                    err
-                );
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        }
-    });
-
-    loop {
-        let update = update_receiver.recv().unwrap();
-        println!("got update message");
-
-        match update.update_oneof.unwrap() {
-            accountsdb_proto::update::UpdateOneof::AccountWrite(update) => {
-                println!("single update");
-                assert!(update.pubkey.len() == 32);
-                assert!(update.owner.len() == 32);
-                account_write_queue_sender
-                    .send(AccountWrite {
-                        pubkey: Pubkey::new(&update.pubkey),
-                        slot: update.slot as i64, // TODO: narrowing
-                        write_version: update.write_version as i64,
-                        lamports: update.lamports as i64,
-                        owner: Pubkey::new(&update.owner),
-                        executable: update.executable,
-                        rent_epoch: update.rent_epoch as i64,
-                        data: update.data,
-                    })
-                    .unwrap();
-            }
-            accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
-                println!("slot update");
-                use accountsdb_proto::slot_update::Status;
-                let status_string = match Status::from_i32(update.status) {
-                    Some(Status::Processed) => "processed",
-                    Some(Status::Confirmed) => "confirmed",
-                    Some(Status::Rooted) => "rooted",
-                    None => "",
-                };
-                if status_string == "" {
-                    error!("unexpected slot status: {}", update.status);
-                    continue;
-                }
-                slot_queue_sender
-                    .send(SlotUpdate {
-                        slot: update.slot as i64, // TODO: narrowing
-                        parent: update.parent.map(|v| v as i64),
-                        status: status_string.into(),
-                    })
-                    .unwrap();
-            }
-            accountsdb_proto::update::UpdateOneof::Ping(_) => {}
-        }
-    }
-
-    return;
-
-    // Subscribe to program account updates websocket
-    let (update_sender, update_receiver) = mpsc::channel::<WebsocketMessage>();
-    tokio::spawn(async move {
-        // if the websocket disconnects, we get no data in a while etc, reconnect and try again
-        loop {
-            let out = feed_data(update_sender.clone());
-            let _ = out.await;
-        }
-    });
-
-    //
-    // The thread that pulls updates and forwards them to postgres
-    //
-
-    // copy websocket updates into the postgres account write queue
-    loop {
-        let update = update_receiver.recv().unwrap();
-        println!("got update message");
-
-        match update {
-            WebsocketMessage::SingleUpdate(update) => {
-                println!("single update");
-                let account: Account = update.value.account.decode().unwrap();
-                let pubkey = Pubkey::from_str(&update.value.pubkey).unwrap();
-                account_write_queue_sender
-                    .send(AccountWrite::from(pubkey, update.context.slot, 0, account))
-                    .unwrap();
-            }
-            WebsocketMessage::SnapshotUpdate(update) => {
-                println!("snapshot update");
-                for keyed_account in update.value {
-                    let account = keyed_account.account.decode().unwrap();
-                    let pubkey = Pubkey::from_str(&keyed_account.pubkey).unwrap();
-                    account_write_queue_sender
-                        .send(AccountWrite::from(pubkey, update.context.slot, 0, account))
-                        .unwrap();
-                }
-            }
-            WebsocketMessage::SlotUpdate(update) => {
-                println!("slot update");
-                let message = match *update {
-                    solana_client::rpc_response::SlotUpdate::CreatedBank {
-                        slot, parent, ..
-                    } => Some(SlotUpdate {
-                        slot: slot as i64, // TODO: narrowing
-                        parent: Some(parent as i64),
-                        status: "processed".into(),
-                    }),
-                    solana_client::rpc_response::SlotUpdate::OptimisticConfirmation {
-                        slot,
-                        ..
-                    } => Some(SlotUpdate {
-                        slot: slot as i64, // TODO: narrowing
-                        parent: None,
-                        status: "confirmed".into(),
-                    }),
-                    solana_client::rpc_response::SlotUpdate::Root { slot, .. } => {
-                        Some(SlotUpdate {
-                            slot: slot as i64, // TODO: narrowing
-                            parent: None,
-                            status: "rooted".into(),
-                        })
-                    }
-                    _ => None,
-                };
-                if let Some(message) = message {
-                    slot_queue_sender.send(message).unwrap();
-                }
-            }
-        }
+    if use_accountsdb {
+        grpc_plugin_source::process_events(account_write_queue_sender, slot_queue_sender);
+    } else {
+        websocket_source::process_events(account_write_queue_sender, slot_queue_sender);
     }
 }
