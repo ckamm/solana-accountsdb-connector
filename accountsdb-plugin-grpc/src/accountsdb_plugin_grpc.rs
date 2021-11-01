@@ -32,15 +32,22 @@ pub mod accountsdb_service {
         tonic::{Code, Request, Response, Status},
     };
 
+    #[derive(Clone, Debug, Deserialize)]
+    pub struct ServiceConfig {
+        broadcast_buffer_size: usize,
+        subscriber_buffer_size: usize,
+    }
+
     #[derive(Debug)]
     pub struct Service {
         pub sender: broadcast::Sender<Update>,
+        pub config: ServiceConfig,
     }
 
     impl Service {
-        pub fn new() -> Self {
-            let (tx, _) = broadcast::channel(100);
-            Self { sender: tx }
+        pub fn new(config: ServiceConfig) -> Self {
+            let (tx, _) = broadcast::channel(config.broadcast_buffer_size);
+            Self { sender: tx, config }
         }
     }
 
@@ -52,14 +59,16 @@ pub mod accountsdb_service {
             &self,
             _request: Request<SubscribeRequest>,
         ) -> Result<Response<Self::SubscribeStream>, Status> {
-            println!("new client");
-            let (tx, rx) = mpsc::channel(100);
+            info!("new subscriber");
+            let (tx, rx) = mpsc::channel(self.config.subscriber_buffer_size);
             let mut broadcast_rx = self.sender.subscribe();
             tokio::spawn(async move {
                 let mut exit = false;
                 while !exit {
                     let fwd = broadcast_rx.recv().await.map_err(|err| {
-                        // TODO: Deal with lag! though maybe just close if RecvError::Lagged happens
+                        // Note: If we can't keep up pulling from the broadcast
+                        // channel here, there'll be a Lagged error, and we'll
+                        // close the connection because data was lost.
                         warn!("error while receiving message to be broadcast: {:?}", err);
                         exit = true;
                         Status::new(Code::Internal, err.to_string())
@@ -75,40 +84,41 @@ pub mod accountsdb_service {
     }
 }
 
-#[derive(Default)]
-pub struct AccountsDbPluginGrpc {
-    runtime: Option<tokio::runtime::Runtime>,
-    server_broadcast: Option<broadcast::Sender<Update>>,
+pub struct PluginData {
+    runtime: tokio::runtime::Runtime,
+    server_broadcast: broadcast::Sender<Update>,
     server_exit_sender: Option<oneshot::Sender<()>>,
-    accounts_selector: Option<AccountsSelector>,
+    accounts_selector: AccountsSelector,
 }
 
-impl std::fmt::Debug for AccountsDbPluginGrpc {
+#[derive(Default)]
+pub struct Plugin {
+    // initialized by on_load()
+    data: Option<PluginData>,
+}
+
+impl std::fmt::Debug for Plugin {
     fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AccountsDbPluginGrpcConfig {
-    pub bind_string: String,
+#[derive(Clone, Debug, Deserialize)]
+pub struct PluginConfig {
+    pub bind_address: String,
+    pub service_config: accountsdb_service::ServiceConfig,
 }
 
-#[derive(Error, Debug)]
-pub enum AccountsDbPluginGrpcError {}
-
-impl AccountsDbPluginGrpc {
+impl PluginData {
     fn broadcast(&self, update: UpdateOneof) {
-        if let Some(sender) = &self.server_broadcast {
-            // Don't care about the error if there are no receivers.
-            let _ = sender.send(Update {
-                update_oneof: Some(update),
-            });
-        }
+        // Don't care about the error that happens when there are no receivers.
+        let _ = self.server_broadcast.send(Update {
+            update_oneof: Some(update),
+        });
     }
 }
 
-impl AccountsDbPlugin for AccountsDbPluginGrpc {
+impl AccountsDbPlugin for Plugin {
     fn name(&self) -> &'static str {
         "AccountsDbPluginGrpc"
     }
@@ -120,14 +130,15 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
             self.name(),
             config_file
         );
+
         let mut file = File::open(config_file)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
         let result: serde_json::Value = serde_json::from_str(&contents).unwrap();
-        self.accounts_selector = Some(Self::create_accounts_selector_from_config(&result));
+        let accounts_selector = Self::create_accounts_selector_from_config(&result);
 
-        let config: AccountsDbPluginGrpcConfig =
+        let config: PluginConfig =
             serde_json::from_str(&contents).map_err(|err| {
                 AccountsDbPluginError::ConfigFileReadError {
                     msg: format!(
@@ -137,35 +148,40 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
                 }
             })?;
 
-        let addr = config.bind_string.parse().map_err(|err| {
+        let addr = config.bind_address.parse().map_err(|err| {
             AccountsDbPluginError::ConfigFileReadError {
-                msg: format!("Error parsing the bind_string {:?}", err),
+                msg: format!("Error parsing the bind_address {:?}", err),
             }
         })?;
 
-        let service = accountsdb_service::Service::new();
-        let (exit_sender, exit_receiver) = oneshot::channel::<()>();
-        self.server_exit_sender = Some(exit_sender);
-        self.server_broadcast = Some(service.sender.clone());
+        let service = accountsdb_service::Service::new(config.service_config);
+        let (server_exit_sender, server_exit_receiver) = oneshot::channel::<()>();
+        let server_broadcast = service.sender.clone();
 
         let server = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.spawn(
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.spawn(
             Server::builder()
                 .add_service(server)
-                .serve_with_shutdown(addr, exit_receiver.map(drop)),
+                .serve_with_shutdown(addr, server_exit_receiver.map(drop)),
         );
-        let sender_c = self.server_broadcast.as_ref().unwrap().clone();
-        rt.spawn(async move {
+        let server_broadcast_c = server_broadcast.clone();
+        runtime.spawn(async move {
             loop {
                 // Don't care about the error if there are no receivers.
-                let _ = sender_c.send(Update {
+                let _ = server_broadcast_c.send(Update {
                     update_oneof: Some(UpdateOneof::Ping(Ping{})),
                 });
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         });
-        self.runtime = Some(rt);
+
+        self.data = Some(PluginData {
+            runtime,
+            server_broadcast,
+            server_exit_sender: Some(server_exit_sender),
+            accounts_selector,
+        });
 
         Ok(())
     }
@@ -173,11 +189,10 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
     fn on_unload(&mut self) {
         info!("Unloading plugin: {:?}", self.name());
 
-        if let Some(sender) = self.server_exit_sender.take() {
-            sender
-                .send(())
-                .expect("sending grpc server termination should succeed");
-        }
+        let data = self.data.as_mut().expect("plugin must be initialized");
+        data.server_exit_sender.take().expect("on_unload can only be called once")
+            .send(())
+            .expect("sending grpc server termination should succeed");
 
         // TODO: explicitly shut down runtime?
     }
@@ -188,26 +203,22 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
         slot: u64,
         is_startup: bool,
     ) -> PluginResult<()> {
+        let data = self.data.as_ref().expect("plugin must be initialized");
         match account {
             ReplicaAccountInfoVersions::V0_0_1(account) => {
-                if let Some(accounts_selector) = &self.accounts_selector {
-                    if !accounts_selector.is_account_selected(account.pubkey, account.owner) {
-                        return Ok(());
-                    }
-                } else {
+                if !data.accounts_selector.is_account_selected(account.pubkey, account.owner) {
                     return Ok(());
                 }
 
                 debug!(
-                    "Updating account {:?} with owner {:?} at slot {:?} using account selector {:?}",
+                    "Updating account {:?} with owner {:?} at slot {:?}",
                     bs58::encode(account.pubkey).into_string(),
                     bs58::encode(account.owner).into_string(),
                     slot,
-                    self.accounts_selector.as_ref().unwrap()
                 );
 
                 // TODO: send the update to all connected streams
-                self.broadcast(UpdateOneof::AccountWrite(AccountWrite {
+                data.broadcast(UpdateOneof::AccountWrite(AccountWrite {
                     slot,
                     is_startup,
                     write_version: account.write_version,
@@ -229,14 +240,15 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
         parent: Option<u64>,
         status: SlotStatus,
     ) -> PluginResult<()> {
-        info!("Updating slot {:?} at with status {:?}", slot, status);
+        let data = self.data.as_ref().expect("plugin must be initialized");
+        debug!("Updating slot {:?} at with status {:?}", slot, status);
 
         let status = match status {
             SlotStatus::Processed => SlotUpdateStatus::Processed,
             SlotStatus::Confirmed => SlotUpdateStatus::Confirmed,
             SlotStatus::Rooted => SlotUpdateStatus::Rooted,
         };
-        self.broadcast(UpdateOneof::SlotUpdate(SlotUpdate {
+        data.broadcast(UpdateOneof::SlotUpdate(SlotUpdate {
             slot,
             parent,
             status: status as i32,
@@ -250,7 +262,7 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
     }
 }
 
-impl AccountsDbPluginGrpc {
+impl Plugin {
     fn create_accounts_selector_from_config(config: &serde_json::Value) -> AccountsSelector {
         let accounts_selector = &config["accounts_selector"];
 
@@ -282,24 +294,15 @@ impl AccountsDbPluginGrpc {
             AccountsSelector::new(&accounts, &owners)
         }
     }
-
-    pub fn new() -> Self {
-        AccountsDbPluginGrpc {
-            runtime: None,
-            server_broadcast: None,
-            server_exit_sender: None,
-            accounts_selector: None,
-        }
-    }
 }
 
 #[no_mangle]
 #[allow(improper_ctypes_definitions)]
 /// # Safety
 ///
-/// This function returns the AccountsDbPluginGrpc pointer as trait AccountsDbPlugin.
+/// This function returns the Plugin pointer as trait AccountsDbPlugin.
 pub unsafe extern "C" fn _create_plugin() -> *mut dyn AccountsDbPlugin {
-    let plugin = AccountsDbPluginGrpc::new();
+    let plugin = Plugin::default();
     let plugin: Box<dyn AccountsDbPlugin> = Box::new(plugin);
     Box::into_raw(plugin)
 }
@@ -315,6 +318,6 @@ pub(crate) mod tests {
         }}";
 
         let config: serde_json::Value = serde_json::from_str(config).unwrap();
-        AccountsDbPluginGrpc::create_accounts_selector_from_config(&config);
+        Plugin::create_accounts_selector_from_config(&config);
     }
 }

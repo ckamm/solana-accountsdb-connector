@@ -565,7 +565,6 @@ fn init_postgres(
                         let w = uncles
                             .get_mut(&it_slot)
                             .expect("uncles has same keys as slots");
-                        println!("{} {:?}", slot.slot, slot.parent);
                         assert!(*w); // TODO: error instead
                         *w = false;
                         if slot.status == "rooted" {
