@@ -306,14 +306,12 @@ async fn feed_data_accountsdb(
                         sender.send(update?).expect("sending must succeed");
                     },
                     None => {
-                        warn!("accountdb stream closed");
-                        return Ok(());
+                        anyhow::bail!("accountsdb plugin has closed the stream");
                     },
                 }
             },
             _ = tokio::time::sleep(Duration::from_secs(60)) => {
-                warn!("accountdb timeout");
-                return Ok(())
+                anyhow::bail!("accountsdb plugin hasn't sent a message in too long");
             }
         }
     }
@@ -628,7 +626,12 @@ async fn main() {
         // Continuously reconnect on failure
         loop {
             let out = feed_data_accountsdb(update_sender.clone());
-            let _ = out.await;
+            let result = out.await;
+            assert!(result.is_err());
+            if let Err(err) = result {
+                warn!("error during communication with the accountsdb plugin. retrying. {:?}", err);
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
     });
 
