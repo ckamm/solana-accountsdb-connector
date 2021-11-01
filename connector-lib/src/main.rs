@@ -508,7 +508,8 @@ fn init_postgres(
 
                 // Keep only the most recent final write per pubkey
                 if newest_final_slot.unwrap_or(-1) < update.slot {
-                    let query = query!(" \
+                    let query = query!(
+                        " \
                         DELETE FROM account_write \
                         USING ( \
                             SELECT DISTINCT ON(pubkey) pubkey, slot, write_version \
@@ -524,7 +525,7 @@ fn init_postgres(
                             ) \
                         )",
                         newest_final_slot = update.slot,
-                        );
+                    );
                     let result = query.execute(client).await.unwrap();
 
                     newest_final_slot = Some(update.slot);
@@ -630,7 +631,10 @@ async fn main() {
             let result = out.await;
             assert!(result.is_err());
             if let Err(err) = result {
-                warn!("error during communication with the accountsdb plugin. retrying. {:?}", err);
+                warn!(
+                    "error during communication with the accountsdb plugin. retrying. {:?}",
+                    err
+                );
             }
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }
@@ -678,8 +682,8 @@ async fn main() {
                         status: status_string.into(),
                     })
                     .unwrap();
-            },
-            accountsdb_proto::update::UpdateOneof::Ping(_) => {},
+            }
+            accountsdb_proto::update::UpdateOneof::Ping(_) => {}
         }
     }
 

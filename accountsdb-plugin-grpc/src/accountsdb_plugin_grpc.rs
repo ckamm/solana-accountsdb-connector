@@ -1,8 +1,8 @@
 use {
     crate::accounts_selector::AccountsSelector,
     accountsdb_proto::{
-        slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, SlotUpdate,
-        SubscribeRequest, Update, Ping,
+        slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
+        SlotUpdate, SubscribeRequest, Update,
     },
     bs58,
     futures_util::FutureExt,
@@ -136,15 +136,14 @@ impl AccountsDbPlugin for Plugin {
         let result: serde_json::Value = serde_json::from_str(&contents).unwrap();
         let accounts_selector = Self::create_accounts_selector_from_config(&result);
 
-        let config: PluginConfig =
-            serde_json::from_str(&contents).map_err(|err| {
-                AccountsDbPluginError::ConfigFileReadError {
-                    msg: format!(
-                        "The config file is not in the JSON format expected: {:?}",
-                        err
-                    ),
-                }
-            })?;
+        let config: PluginConfig = serde_json::from_str(&contents).map_err(|err| {
+            AccountsDbPluginError::ConfigFileReadError {
+                msg: format!(
+                    "The config file is not in the JSON format expected: {:?}",
+                    err
+                ),
+            }
+        })?;
 
         let addr = config.bind_address.parse().map_err(|err| {
             AccountsDbPluginError::ConfigFileReadError {
@@ -168,7 +167,7 @@ impl AccountsDbPlugin for Plugin {
             loop {
                 // Don't care about the error if there are no receivers.
                 let _ = server_broadcast_c.send(Update {
-                    update_oneof: Some(UpdateOneof::Ping(Ping{})),
+                    update_oneof: Some(UpdateOneof::Ping(Ping {})),
                 });
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
@@ -188,7 +187,9 @@ impl AccountsDbPlugin for Plugin {
         info!("Unloading plugin: {:?}", self.name());
 
         let data = self.data.as_mut().expect("plugin must be initialized");
-        data.server_exit_sender.take().expect("on_unload can only be called once")
+        data.server_exit_sender
+            .take()
+            .expect("on_unload can only be called once")
             .send(())
             .expect("sending grpc server termination should succeed");
 
@@ -204,7 +205,10 @@ impl AccountsDbPlugin for Plugin {
         let data = self.data.as_ref().expect("plugin must be initialized");
         match account {
             ReplicaAccountInfoVersions::V0_0_1(account) => {
-                if !data.accounts_selector.is_account_selected(account.pubkey, account.owner) {
+                if !data
+                    .accounts_selector
+                    .is_account_selected(account.pubkey, account.owner)
+                {
                     return Ok(());
                 }
 
