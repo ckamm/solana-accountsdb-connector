@@ -13,8 +13,6 @@ path = "src/test_server.rs"
 
 [dependencies]
 bs58 = "0.4.0"
-chrono = { version = "0.4.11", features = ["serde"] }
-crossbeam-channel = "0.5"
 log = "0.4.14"
 serde = "1.0.130"
 serde_derive = "1.0.103"
@@ -24,8 +22,6 @@ solana-accountsdb-plugin-interface = "=1.8.2"
 solana-logger = "=1.8.2"
 solana-metrics = "=1.8.2"
 solana-sdk = "=1.8.2"
-
-thiserror = "1.0.21"
 
 tonic = "0.6"
 prost = "0.9"

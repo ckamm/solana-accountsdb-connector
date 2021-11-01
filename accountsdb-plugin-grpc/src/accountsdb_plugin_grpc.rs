@@ -7,15 +7,13 @@ use {
     bs58,
     futures_util::FutureExt,
     log::*,
-    serde_derive::{Deserialize, Serialize},
+    serde_derive::Deserialize,
     serde_json,
     solana_accountsdb_plugin_interface::accountsdb_plugin_interface::{
         AccountsDbPlugin, AccountsDbPluginError, ReplicaAccountInfoVersions,
         Result as PluginResult, SlotStatus,
     },
-    std::sync::Mutex,
     std::{fs::File, io::Read},
-    thiserror::Error,
     tokio::sync::{broadcast, mpsc, oneshot},
     tonic::transport::Server,
 };
@@ -27,7 +25,7 @@ pub mod accountsdb_proto {
 pub mod accountsdb_service {
     use super::*;
     use {
-        accountsdb_proto::accounts_db_server::{AccountsDb, AccountsDbServer},
+        accountsdb_proto::accounts_db_server::AccountsDb,
         tokio_stream::wrappers::ReceiverStream,
         tonic::{Code, Request, Response, Status},
     };
@@ -73,7 +71,7 @@ pub mod accountsdb_service {
                         exit = true;
                         Status::new(Code::Internal, err.to_string())
                     });
-                    if let Err(err) = tx.send(fwd).await {
+                    if let Err(_err) = tx.send(fwd).await {
                         info!("subscriber stream closed");
                         exit = true;
                     }
