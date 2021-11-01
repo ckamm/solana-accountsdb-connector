@@ -663,7 +663,8 @@ async fn main() {
                         status: "bla".into(),
                     })
                     .unwrap();
-            }
+            },
+            accountsdb_proto::update::UpdateOneof::Ping(_) => {},
         }
     }
 

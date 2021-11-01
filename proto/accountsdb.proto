@@ -17,6 +17,7 @@ message Update {
   oneof update_oneof {
     AccountWrite account_write = 1;
     SlotUpdate slot_update = 2;
+    Ping ping = 3;
   }
 }
 
@@ -43,3 +44,5 @@ message SlotUpdate {
   Status status = 3;
 }
 
+message Ping {
+}

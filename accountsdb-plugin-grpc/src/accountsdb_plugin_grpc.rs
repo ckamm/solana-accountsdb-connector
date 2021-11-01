@@ -2,7 +2,7 @@ use {
     crate::accounts_selector::AccountsSelector,
     accountsdb_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, SlotUpdate,
-        SubscribeRequest, Update,
+        SubscribeRequest, Update, Ping,
     },
     bs58,
     futures_util::FutureExt,
@@ -155,6 +155,16 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
                 .add_service(server)
                 .serve_with_shutdown(addr, exit_receiver.map(drop)),
         );
+        let sender_c = self.server_broadcast.as_ref().unwrap().clone();
+        rt.spawn(async move {
+            loop {
+                // Don't care about the error if there are no receivers.
+                let _ = sender_c.send(Update {
+                    update_oneof: Some(UpdateOneof::Ping(Ping{})),
+                });
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        });
         self.runtime = Some(rt);
 
         Ok(())
@@ -168,6 +178,8 @@ impl AccountsDbPlugin for AccountsDbPluginGrpc {
                 .send(())
                 .expect("sending grpc server termination should succeed");
         }
+
+        // TODO: explicitly shut down runtime?
     }
 
     fn update_account(
