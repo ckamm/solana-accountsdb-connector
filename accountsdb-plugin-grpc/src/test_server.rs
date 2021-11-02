@@ -1,6 +1,6 @@
+use rand::Rng;
 use tokio::sync::{broadcast, mpsc};
 use tonic::transport::Server;
-use rand::Rng;
 
 pub mod accountsdb_proto {
     tonic::include_proto!("accountsdb");

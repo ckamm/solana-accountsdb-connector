@@ -10,7 +10,7 @@ use solana_client::{
 use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext, rpc_pubsub::RpcSolPubSubClient};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
-use log::{error, info, trace, warn};
+use log::*;
 use std::{
     str::FromStr,
     sync::Arc,

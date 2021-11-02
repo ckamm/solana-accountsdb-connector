@@ -6,7 +6,7 @@ use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
 use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 
-use log::{error, info, trace, warn};
+use log::*;
 use std::{str::FromStr, time::Duration};
 
 pub mod accountsdb_proto {
@@ -104,11 +104,9 @@ pub fn process_events(
 
     loop {
         let update = update_receiver.recv().unwrap();
-        println!("got update message");
 
         match update.update_oneof.unwrap() {
             accountsdb_proto::update::UpdateOneof::AccountWrite(update) => {
-                println!("single update");
                 assert!(update.pubkey.len() == 32);
                 assert!(update.owner.len() == 32);
                 account_write_queue_sender
@@ -125,7 +123,6 @@ pub fn process_events(
                     .unwrap();
             }
             accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
-                println!("slot update");
                 use accountsdb_proto::slot_update::Status;
                 let status_string = match Status::from_i32(update.status) {
                     Some(Status::Processed) => "processed",
