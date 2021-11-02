@@ -12,7 +12,7 @@ use std::{
     cmp::max,
     collections::HashMap,
     ops::Deref,
-    sync::{mpsc, Arc, RwLock},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -159,13 +159,16 @@ pub struct SlotUpdate {
 
 fn init_postgres(
     connection_string: String,
-) -> (mpsc::Sender<AccountWrite>, mpsc::Sender<SlotUpdate>) {
+) -> (
+    crossbeam_channel::Sender<AccountWrite>,
+    crossbeam_channel::Sender<SlotUpdate>,
+) {
     // The actual message may want to also contain a retry count, if it self-reinserts on failure?
     let (account_write_queue_sender, account_write_queue_receiver) =
-        mpsc::channel::<AccountWrite>();
+        crossbeam_channel::unbounded::<AccountWrite>();
 
     // slot updates are not parallel because their order matters
-    let (slot_queue_sender, slot_queue_receiver) = mpsc::channel::<SlotUpdate>();
+    let (slot_queue_sender, slot_queue_receiver) = crossbeam_channel::unbounded::<SlotUpdate>();
 
     // the postgres connection management thread
     // - creates a connection and runs it

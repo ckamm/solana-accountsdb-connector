@@ -7,7 +7,7 @@ use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use log::{error, info, trace, warn};
-use std::{str::FromStr, sync::mpsc, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 pub mod accountsdb_proto {
     tonic::include_proto!("accountsdb");
@@ -17,7 +17,7 @@ use accountsdb_proto::accounts_db_client::AccountsDbClient;
 use crate::{AccountWrite, AnyhowWrap, SlotUpdate};
 
 async fn feed_data_accountsdb(
-    sender: mpsc::Sender<accountsdb_proto::Update>,
+    sender: crossbeam_channel::Sender<accountsdb_proto::Update>,
 ) -> Result<(), anyhow::Error> {
     let rpc_http_url = "";
 
@@ -80,11 +80,12 @@ async fn feed_data_accountsdb(
 }
 
 pub fn process_events(
-    account_write_queue_sender: mpsc::Sender<AccountWrite>,
-    slot_queue_sender: mpsc::Sender<SlotUpdate>,
+    account_write_queue_sender: crossbeam_channel::Sender<AccountWrite>,
+    slot_queue_sender: crossbeam_channel::Sender<SlotUpdate>,
 ) {
     // Subscribe to accountsdb
-    let (update_sender, update_receiver) = mpsc::channel::<accountsdb_proto::Update>();
+    let (update_sender, update_receiver) =
+        crossbeam_channel::unbounded::<accountsdb_proto::Update>();
     tokio::spawn(async move {
         // Continuously reconnect on failure
         loop {

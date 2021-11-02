@@ -13,7 +13,7 @@ use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::
 use log::{error, info, trace, warn};
 use std::{
     str::FromStr,
-    sync::{mpsc, Arc},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -41,7 +41,9 @@ enum WebsocketMessage {
 }
 
 // TODO: the reconnecting should be part of this
-async fn feed_data(sender: mpsc::Sender<WebsocketMessage>) -> Result<(), anyhow::Error> {
+async fn feed_data(
+    sender: crossbeam_channel::Sender<WebsocketMessage>,
+) -> Result<(), anyhow::Error> {
     let rpc_pubsub_url = "";
     let rpc_http_url = "";
     let program_id = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68")?;
@@ -131,11 +133,11 @@ async fn feed_data(sender: mpsc::Sender<WebsocketMessage>) -> Result<(), anyhow:
 
 // TODO: rename / split / rework
 pub fn process_events(
-    account_write_queue_sender: mpsc::Sender<AccountWrite>,
-    slot_queue_sender: mpsc::Sender<SlotUpdate>,
+    account_write_queue_sender: crossbeam_channel::Sender<AccountWrite>,
+    slot_queue_sender: crossbeam_channel::Sender<SlotUpdate>,
 ) {
     // Subscribe to program account updates websocket
-    let (update_sender, update_receiver) = mpsc::channel::<WebsocketMessage>();
+    let (update_sender, update_receiver) = crossbeam_channel::unbounded::<WebsocketMessage>();
     tokio::spawn(async move {
         // if the websocket disconnects, we get no data in a while etc, reconnect and try again
         loop {
