@@ -153,11 +153,11 @@ pub fn process_events(
     // copy websocket updates into the postgres account write queue
     loop {
         let update = update_receiver.recv().unwrap();
-        println!("got update message");
+        info!("got update message");
 
         match update {
             WebsocketMessage::SingleUpdate(update) => {
-                println!("single update");
+                info!("single update");
                 let account: Account = update.value.account.decode().unwrap();
                 let pubkey = Pubkey::from_str(&update.value.pubkey).unwrap();
                 account_write_queue_sender
@@ -165,7 +165,7 @@ pub fn process_events(
                     .unwrap();
             }
             WebsocketMessage::SnapshotUpdate(update) => {
-                println!("snapshot update");
+                info!("snapshot update");
                 for keyed_account in update.value {
                     let account: Account = keyed_account.account.decode().unwrap();
                     let pubkey = Pubkey::from_str(&keyed_account.pubkey).unwrap();
@@ -175,7 +175,7 @@ pub fn process_events(
                 }
             }
             WebsocketMessage::SlotUpdate(update) => {
-                println!("slot update");
+                info!("slot update");
                 let message = match *update {
                     solana_client::rpc_response::SlotUpdate::CreatedBank {
                         slot, parent, ..

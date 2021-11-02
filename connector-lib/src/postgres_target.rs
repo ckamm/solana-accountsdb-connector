@@ -102,7 +102,7 @@ pub fn init(
                     data = write.data,
                     );
                 let result = query.execute(client).await.unwrap();
-                println!("new write: count: {}", result);
+                info!("new write: count: {}", result);
             });
         }
     });
@@ -148,7 +148,7 @@ pub fn init(
                     status = update.status,
                 );
                 let result = query.execute(client).await.unwrap();
-                println!("new slot: count: {}", result);
+                info!("new slot: count: {}", result);
             } else {
                 let query = query!(
                     " \
@@ -162,11 +162,11 @@ pub fn init(
                     status = update.status,
                 );
                 let result = query.execute(client).await.unwrap();
-                println!("new slot: count: {}", result);
+                info!("new slot: count: {}", result);
             }
 
             if update.status == "rooted" {
-                println!("slot changed to rooted");
+                info!("slot changed to rooted");
                 slots.remove(&update.slot);
 
                 // TODO: should also convert all parents to rooted, just in case we missed an update
@@ -214,7 +214,7 @@ pub fn init(
                 let new_newest_slot = newest_nonfinal_slot.unwrap_or(-1) < update.slot;
 
                 if new_newest_slot || parent_update {
-                    println!("recomputing uncles");
+                    info!("recomputing uncles");
                     // update the uncle column for the chain of slots from the
                     // newest down the the first rooted slot
                     let query = query!("\

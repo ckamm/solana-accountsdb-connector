@@ -3903,6 +3903,7 @@ dependencies = [
  "serde",
  "solana-account-decoder",
  "solana-client",
+ "solana-logger",
  "solana-rpc",
  "solana-sdk",
  "tokio",

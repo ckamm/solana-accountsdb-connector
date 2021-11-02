@@ -6,26 +6,6 @@ use solana_sdk::pubkey::Pubkey;
 
 use log::*;
 
-struct SimpleLogger;
-impl log::Log for SimpleLogger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= log::Level::Info
-    }
-
-    fn log(&self, record: &log::Record) {
-        if self.enabled(record.metadata()) {
-            println!("{} - {}", record.level(), record.args());
-        }
-    }
-
-    fn flush(&self) {}
-}
-static LOGGER: SimpleLogger = SimpleLogger;
-
-//
-// main etc.
-//
-
 trait AnyhowWrap {
     type Value;
     fn map_err_anyhow(self) -> anyhow::Result<Self::Value>;
@@ -59,9 +39,7 @@ pub struct SlotUpdate {
 
 #[tokio::main]
 async fn main() {
-    log::set_logger(&LOGGER)
-        .map(|()| log::set_max_level(log::LevelFilter::Info))
-        .unwrap();
+    solana_logger::setup_with_default("info");
     info!("startup");
 
     let postgres_connection_string = "host=/var/run/postgresql user=kamm port=5433";

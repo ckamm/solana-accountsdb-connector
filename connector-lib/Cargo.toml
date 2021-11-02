@@ -13,7 +13,8 @@ jsonrpc-core-client = { version = "18.0.0", features = ["ws", "http"] }
 solana-rpc = "=1.8.2"
 solana-client = "=1.8.2"
 solana-account-decoder = "1.8.2"
-solana-sdk = "^1.7.10"
+solana-sdk = "=1.8.2"
+solana-logger = "=1.8.2"
 
 hyper = { version = "0.14", features = ["client", "http1"] }
 hyper-tls = { version = "0.5" }
