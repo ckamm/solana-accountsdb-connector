@@ -4,7 +4,7 @@ mod websocket_source;
 
 use {
     serde_derive::Deserialize,
-    solana_sdk::pubkey::Pubkey,
+    solana_sdk::{account::Account, pubkey::Pubkey},
     log::*,
     std::{
         fs::File,
@@ -34,6 +34,21 @@ pub struct AccountWrite {
     pub executable: bool,
     pub rent_epoch: i64,
     pub data: Vec<u8>,
+}
+
+impl crate::AccountWrite {
+    fn from(pubkey: Pubkey, slot: u64, write_version: i64, account: Account) -> AccountWrite {
+        AccountWrite {
+            pubkey,
+            slot: slot as i64, // TODO: narrowing!
+            write_version,
+            lamports: account.lamports as i64, // TODO: narrowing!
+            owner: account.owner,
+            executable: account.executable,
+            rent_epoch: account.rent_epoch as i64, // TODO: narrowing!
+            data: account.data.clone(),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]

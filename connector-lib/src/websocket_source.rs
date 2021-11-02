@@ -19,21 +19,6 @@ use std::{
 
 use crate::{AccountWrite, AnyhowWrap, SlotUpdate, Config};
 
-impl crate::AccountWrite {
-    fn from(pubkey: Pubkey, slot: u64, write_version: i64, account: Account) -> AccountWrite {
-        AccountWrite {
-            pubkey,
-            slot: slot as i64, // TODO: narrowing!
-            write_version,
-            lamports: account.lamports as i64, // TODO: narrowing!
-            owner: account.owner,
-            executable: account.executable,
-            rent_epoch: account.rent_epoch as i64, // TODO: narrowing!
-            data: account.data.clone(),
-        }
-    }
-}
-
 enum WebsocketMessage {
     SingleUpdate(Response<RpcKeyedAccount>),
     SnapshotUpdate(Response<Vec<RpcKeyedAccount>>),
