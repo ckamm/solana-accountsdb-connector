@@ -1,5 +1,6 @@
 use tokio::sync::{broadcast, mpsc};
 use tonic::transport::Server;
+use rand::Rng;
 
 pub mod accountsdb_proto {
     tonic::include_proto!("accountsdb");
@@ -58,14 +59,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let svc = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
 
     tokio::spawn(async move {
+        let mut slot = 0;
         loop {
             if sender.receiver_count() > 0 {
                 println!("sending...");
+                slot = slot + 1;
+                let parent = slot - rand::thread_rng().gen_range(1..=2);
                 sender
                     .send(Update {
                         update_oneof: Some(UpdateOneof::SlotUpdate(SlotUpdate {
-                            slot: 0,
-                            parent: None,
+                            slot: slot,
+                            parent: Some(parent),
                             status: 0,
                         })),
                     })

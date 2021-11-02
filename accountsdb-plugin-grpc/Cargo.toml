@@ -31,7 +31,7 @@ tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "tim
 tokio-stream = "0.1"
 
 async-stream = "0.2"
-rand = "0.7"
+rand = "0.8"
 
 [build-dependencies]
 tonic-build = "0.6"

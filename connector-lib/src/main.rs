@@ -359,45 +359,25 @@ fn init_postgres(
 
                 if new_newest_slot || parent_update {
                     println!("recomputing uncles");
-                    // recompute uncles and store to postgres for each slot in slots
-                    let mut uncles: HashMap<i64, bool> = slots.keys().map(|k| (*k, true)).collect();
-
-                    /* Could do this in SQL like...
-                    with recursive liveslots as (
-                        select * from slot where slot = (select max(slot) from slot)
-                        union
-                        select s.* from slot s inner join liveslots l on l.parent = s.slot where s.status != 'rooted'
-                    )
-                    select * from liveslots order by slot;
-                    */
-                    let mut it_slot = max(newest_nonfinal_slot.unwrap_or(-1), update.slot);
-                    while let Some(slot) = slots.get(&it_slot) {
-                        let w = uncles
-                            .get_mut(&it_slot)
-                            .expect("uncles has same keys as slots");
-                        assert!(*w); // TODO: error instead
-                        *w = false;
-                        if slot.status == "rooted" {
-                            break;
-                        }
-                        if let Some(parent) = slot.parent {
-                            it_slot = parent;
-                        } else {
-                            break;
-                        }
-                    }
-
-                    // Updating uncle state must be done as a transaction
-                    let transaction = client.transaction().await.unwrap();
-                    for (slot, is_uncle) in uncles {
-                        let query = query!(
-                            "UPDATE slot SET uncle = $is_uncle WHERE slot = $slot",
-                            is_uncle,
-                            slot,
-                        );
-                        let result = query.execute(&transaction).await.unwrap();
-                    }
-                    transaction.into_inner().commit().await.unwrap();
+                    // update the uncle column for the chain of slots from the
+                    // newest down the the first rooted slot
+                    let query = query!("\
+                        WITH RECURSIVE
+                            liveslots AS (
+                                SELECT slot.*, 0 AS depth FROM slot
+                                    WHERE slot = (SELECT max(slot) FROM slot)
+                                UNION ALL
+                                SELECT s.*, depth + 1 FROM slot s
+                                    INNER JOIN liveslots l ON s.slot = l.parent
+                                    WHERE l.status != 'rooted' AND depth < 1000
+                            ),
+                            min_slot AS (SELECT min(slot) AS min_slot FROM liveslots)
+                        UPDATE slot SET
+                            uncle = NOT EXISTS (SELECT 1 FROM liveslots WHERE liveslots.slot = slot.slot)
+                            FROM min_slot
+                            WHERE slot >= min_slot;"
+                    );
+                    let result = query.execute(client).await.unwrap();
                 }
 
                 if new_newest_slot {
