@@ -6,6 +6,8 @@ use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
 use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
 use solana_sdk::{commitment_config::CommitmentConfig, pubkey::Pubkey};
 
+use tonic::transport::Endpoint;
+
 use log::*;
 use std::{str::FromStr, time::Duration};
 
@@ -14,21 +16,20 @@ pub mod accountsdb_proto {
 }
 use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
-use crate::{AccountWrite, AnyhowWrap, SlotUpdate};
+use crate::{AccountWrite, AnyhowWrap, SlotUpdate, Config};
 
 async fn feed_data_accountsdb(
+    config: &Config,
     sender: crossbeam_channel::Sender<accountsdb_proto::Update>,
 ) -> Result<(), anyhow::Error> {
-    let rpc_http_url = "";
-
-    let mut client = AccountsDbClient::connect("http://[::1]:10000").await?;
+    let mut client = AccountsDbClient::connect(Endpoint::from_str(&config.grpc_connection_string)?).await?;
 
     let mut update_stream = client
         .subscribe(accountsdb_proto::SubscribeRequest {})
         .await?
         .into_inner();
 
-    let rpc_client = http::connect_with_options::<FullClient>(&rpc_http_url, true)
+    let rpc_client = http::connect_with_options::<FullClient>(&config.rpc_http_url, true)
         .await
         .map_err_anyhow()?;
 
@@ -80,6 +81,7 @@ async fn feed_data_accountsdb(
 }
 
 pub fn process_events(
+    config: Config,
     account_write_queue_sender: crossbeam_channel::Sender<AccountWrite>,
     slot_queue_sender: crossbeam_channel::Sender<SlotUpdate>,
 ) {
@@ -89,7 +91,7 @@ pub fn process_events(
     tokio::spawn(async move {
         // Continuously reconnect on failure
         loop {
-            let out = feed_data_accountsdb(update_sender.clone());
+            let out = feed_data_accountsdb(&config, update_sender.clone());
             let result = out.await;
             assert!(result.is_err());
             if let Err(err) = result {

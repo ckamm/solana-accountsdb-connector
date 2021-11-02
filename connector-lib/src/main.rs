@@ -2,9 +2,15 @@ mod grpc_plugin_source;
 mod postgres_target;
 mod websocket_source;
 
-use solana_sdk::pubkey::Pubkey;
-
-use log::*;
+use {
+    serde_derive::Deserialize,
+    solana_sdk::pubkey::Pubkey,
+    log::*,
+    std::{
+        fs::File,
+        io::Read,
+    },
+};
 
 trait AnyhowWrap {
     type Value;
@@ -37,19 +43,47 @@ pub struct SlotUpdate {
     pub status: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct Config {
+    postgres_connection_string: String,
+    grpc_connection_string: String,
+    rpc_http_url: String,
+    rpc_ws_url: String,
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), anyhow::Error> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        println!("requires a config file argument");
+        return Ok(());
+    }
+
+    let config: Config = {
+        let mut file = File::open(&args[1])?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        serde_json::from_str(&contents).unwrap()
+    };
+
     solana_logger::setup_with_default("info");
     info!("startup");
 
-    let postgres_connection_string = "host=/var/run/postgresql user=kamm port=5433";
     let (account_write_queue_sender, slot_queue_sender) =
-        postgres_target::init(postgres_connection_string.into());
+        postgres_target::init(&config.postgres_connection_string);
 
     let use_accountsdb = true;
     if use_accountsdb {
-        grpc_plugin_source::process_events(account_write_queue_sender, slot_queue_sender);
+        grpc_plugin_source::process_events(
+            config,
+            account_write_queue_sender,
+            slot_queue_sender);
     } else {
-        websocket_source::process_events(account_write_queue_sender, slot_queue_sender);
+        websocket_source::process_events(
+            config,
+            account_write_queue_sender,
+            slot_queue_sender);
     }
+
+    Ok(())
 }

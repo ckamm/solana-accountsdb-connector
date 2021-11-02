@@ -9,7 +9,7 @@ use std::{
 use crate::{AccountWrite, SlotUpdate};
 
 pub fn init(
-    connection_string: String,
+    connection_string: &str,
 ) -> (
     crossbeam_channel::Sender<AccountWrite>,
     crossbeam_channel::Sender<SlotUpdate>,
@@ -27,7 +27,7 @@ pub fn init(
     let postgres_client: Arc<RwLock<Arc<Option<postgres_query::Caching<tokio_postgres::Client>>>>> =
         Arc::new(RwLock::new(Arc::new(None)));
     let postgres_client_c = Arc::clone(&postgres_client);
-    let connection_string_c = connection_string.clone();
+    let connection_string_c = connection_string.to_string();
     tokio::spawn(async move {
         let (client, connection) =
             tokio_postgres::connect(&connection_string_c, tokio_postgres::NoTls)
@@ -46,7 +46,7 @@ pub fn init(
         RwLock<Option<postgres_query::Caching<tokio_postgres::Client>>>,
     > = Arc::new(RwLock::new(None));
     let postgres_client_slots_c = Arc::clone(&postgres_client_slots);
-    let connection_string_c = connection_string.clone();
+    let connection_string_c = connection_string.to_string();
     tokio::spawn(async move {
         let (client, connection) =
             tokio_postgres::connect(&connection_string_c, tokio_postgres::NoTls)
