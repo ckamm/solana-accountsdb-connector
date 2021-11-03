@@ -3,13 +3,10 @@ mod postgres_target;
 mod websocket_source;
 
 use {
+    log::*,
     serde_derive::Deserialize,
     solana_sdk::{account::Account, pubkey::Pubkey},
-    log::*,
-    std::{
-        fs::File,
-        io::Read,
-    },
+    std::{fs::File, io::Read},
 };
 
 trait AnyhowWrap {
@@ -85,19 +82,16 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("startup");
 
     let (account_write_queue_sender, slot_queue_sender) =
-        postgres_target::init(&config.postgres_connection_string);
+        postgres_target::init(&config.postgres_connection_string).await?;
 
+    info!("postgres done");
     let use_accountsdb = true;
     if use_accountsdb {
-        grpc_plugin_source::process_events(
-            config,
-            account_write_queue_sender,
-            slot_queue_sender);
+        grpc_plugin_source::process_events(config, account_write_queue_sender, slot_queue_sender)
+            .await;
     } else {
-        websocket_source::process_events(
-            config,
-            account_write_queue_sender,
-            slot_queue_sender);
+        websocket_source::process_events(config, account_write_queue_sender, slot_queue_sender)
+            .await;
     }
 
     Ok(())

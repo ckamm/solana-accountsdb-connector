@@ -3,8 +3,8 @@ use jsonrpc_core_client::transports::http;
 
 use solana_account_decoder::UiAccountEncoding;
 use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
-use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
 use solana_client::rpc_response::{Response, RpcKeyedAccount};
+use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use tonic::transport::Endpoint;
@@ -17,7 +17,7 @@ pub mod accountsdb_proto {
 }
 use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
-use crate::{AccountWrite, AnyhowWrap, SlotUpdate, Config};
+use crate::{AccountWrite, AnyhowWrap, Config, SlotUpdate};
 
 enum Message {
     GrpcUpdate(accountsdb_proto::Update),
@@ -26,9 +26,10 @@ enum Message {
 
 async fn feed_data_accountsdb(
     config: &Config,
-    sender: crossbeam_channel::Sender<Message>,
+    sender: async_channel::Sender<Message>,
 ) -> Result<(), anyhow::Error> {
-    let mut client = AccountsDbClient::connect(Endpoint::from_str(&config.grpc_connection_string)?).await?;
+    let mut client =
+        AccountsDbClient::connect(Endpoint::from_str(&config.grpc_connection_string)?).await?;
 
     let mut update_stream = client
         .subscribe(accountsdb_proto::SubscribeRequest {})
@@ -65,7 +66,10 @@ async fn feed_data_accountsdb(
         .await
         .map_err_anyhow()?;
     if let OptionalContext::Context(account_snapshot_response) = account_snapshot {
-        sender.send(Message::Snapshot(account_snapshot_response)).expect("sending must succeed");
+        sender
+            .send(Message::Snapshot(account_snapshot_response))
+            .await
+            .expect("send success");
     } else {
         anyhow::bail!("bad snapshot format");
     }
@@ -76,7 +80,7 @@ async fn feed_data_accountsdb(
             update = update_stream.next() => {
                 match update {
                     Some(update) => {
-                        sender.send(Message::GrpcUpdate(update?)).expect("sending must succeed");
+                        sender.send(Message::GrpcUpdate(update?)).await.expect("send success");
                     },
                     None => {
                         anyhow::bail!("accountsdb plugin has closed the stream");
@@ -90,14 +94,13 @@ async fn feed_data_accountsdb(
     }
 }
 
-pub fn process_events(
+pub async fn process_events(
     config: Config,
-    account_write_queue_sender: crossbeam_channel::Sender<AccountWrite>,
-    slot_queue_sender: crossbeam_channel::Sender<SlotUpdate>,
+    account_write_queue_sender: async_channel::Sender<AccountWrite>,
+    slot_queue_sender: async_channel::Sender<SlotUpdate>,
 ) {
     // Subscribe to accountsdb
-    let (msg_sender, msg_receiver) =
-        crossbeam_channel::unbounded::<Message>();
+    let (msg_sender, msg_receiver) = async_channel::unbounded::<Message>();
     tokio::spawn(async move {
         // Continuously reconnect on failure
         loop {
@@ -115,7 +118,7 @@ pub fn process_events(
     });
 
     loop {
-        let msg = msg_receiver.recv().unwrap();
+        let msg = msg_receiver.recv().await.unwrap();
 
         match msg {
             Message::GrpcUpdate(update) => {
@@ -134,7 +137,8 @@ pub fn process_events(
                                 rent_epoch: update.rent_epoch as i64,
                                 data: update.data,
                             })
-                            .unwrap();
+                            .await
+                            .expect("send success");
                     }
                     accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
                         use accountsdb_proto::slot_update::Status;
@@ -154,20 +158,24 @@ pub fn process_events(
                                 parent: update.parent.map(|v| v as i64),
                                 status: status_string.into(),
                             })
-                            .unwrap();
+                            .await
+                            .expect("send success");
                     }
                     accountsdb_proto::update::UpdateOneof::Ping(_) => {}
                 }
-            },
+            }
             Message::Snapshot(update) => {
                 info!("processing snapshot...");
                 for keyed_account in update.value {
                     let account: Account = keyed_account.account.decode().unwrap();
                     let pubkey = Pubkey::from_str(&keyed_account.pubkey).unwrap();
-                    account_write_queue_sender.send(AccountWrite::from(pubkey, update.context.slot, 0, account)).unwrap();
+                    account_write_queue_sender
+                        .send(AccountWrite::from(pubkey, update.context.slot, 0, account))
+                        .await
+                        .expect("send success");
                 }
                 info!("processing snapshot done");
-            },
+            }
         }
     }
 }

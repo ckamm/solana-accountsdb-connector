@@ -38,7 +38,7 @@ futures-util = "0.3"
 async-stream = "0.2"
 rand = "0.7"
 anyhow = "1.0"
-crossbeam-channel = "0.5"
+async-channel = "1.6"
 
 [build-dependencies]
 tonic-build = "0.6"

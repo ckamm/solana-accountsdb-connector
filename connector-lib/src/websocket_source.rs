@@ -17,7 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{AccountWrite, AnyhowWrap, SlotUpdate, Config};
+use crate::{AccountWrite, AnyhowWrap, Config, SlotUpdate};
 
 enum WebsocketMessage {
     SingleUpdate(Response<RpcKeyedAccount>),
@@ -28,7 +28,7 @@ enum WebsocketMessage {
 // TODO: the reconnecting should be part of this
 async fn feed_data(
     config: &Config,
-    sender: crossbeam_channel::Sender<WebsocketMessage>,
+    sender: async_channel::Sender<WebsocketMessage>,
 ) -> Result<(), anyhow::Error> {
     let program_id = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68")?;
     let mango_group_address = Pubkey::from_str("98pjRuQjK3qA6gXts96PqZT4Ze5QmnCmt3QYjhbUSPue")?;
@@ -79,6 +79,7 @@ async fn feed_data(
             if let OptionalContext::Context(account_snapshot_response) = account_snapshot {
                 sender
                     .send(WebsocketMessage::SnapshotUpdate(account_snapshot_response))
+                    .await
                     .expect("sending must succeed");
             }
             last_snapshot = Instant::now();
@@ -88,7 +89,7 @@ async fn feed_data(
             account = update_sub.next() => {
                 match account {
                     Some(account) => {
-                        sender.send(WebsocketMessage::SingleUpdate(account.map_err_anyhow()?)).expect("sending must succeed");
+                        sender.send(WebsocketMessage::SingleUpdate(account.map_err_anyhow()?)).await.expect("sending must succeed");
                     },
                     None => {
                         warn!("account stream closed");
@@ -99,7 +100,7 @@ async fn feed_data(
             slot_update = slot_sub.next() => {
                 match slot_update {
                     Some(slot_update) => {
-                        sender.send(WebsocketMessage::SlotUpdate(slot_update.map_err_anyhow()?)).expect("sending must succeed");
+                        sender.send(WebsocketMessage::SlotUpdate(slot_update.map_err_anyhow()?)).await.expect("sending must succeed");
                     },
                     None => {
                         warn!("slot update stream closed");
@@ -116,13 +117,13 @@ async fn feed_data(
 }
 
 // TODO: rename / split / rework
-pub fn process_events(
+pub async fn process_events(
     config: Config,
-    account_write_queue_sender: crossbeam_channel::Sender<AccountWrite>,
-    slot_queue_sender: crossbeam_channel::Sender<SlotUpdate>,
+    account_write_queue_sender: async_channel::Sender<AccountWrite>,
+    slot_queue_sender: async_channel::Sender<SlotUpdate>,
 ) {
     // Subscribe to program account updates websocket
-    let (update_sender, update_receiver) = crossbeam_channel::unbounded::<WebsocketMessage>();
+    let (update_sender, update_receiver) = async_channel::unbounded::<WebsocketMessage>();
     tokio::spawn(async move {
         // if the websocket disconnects, we get no data in a while etc, reconnect and try again
         loop {
@@ -137,7 +138,7 @@ pub fn process_events(
 
     // copy websocket updates into the postgres account write queue
     loop {
-        let update = update_receiver.recv().unwrap();
+        let update = update_receiver.recv().await.unwrap();
         info!("got update message");
 
         match update {
@@ -147,7 +148,8 @@ pub fn process_events(
                 let pubkey = Pubkey::from_str(&update.value.pubkey).unwrap();
                 account_write_queue_sender
                     .send(AccountWrite::from(pubkey, update.context.slot, 0, account))
-                    .unwrap();
+                    .await
+                    .expect("send success");
             }
             WebsocketMessage::SnapshotUpdate(update) => {
                 info!("snapshot update");
@@ -156,7 +158,8 @@ pub fn process_events(
                     let pubkey = Pubkey::from_str(&keyed_account.pubkey).unwrap();
                     account_write_queue_sender
                         .send(AccountWrite::from(pubkey, update.context.slot, 0, account))
-                        .unwrap();
+                        .await
+                        .expect("send success");
                 }
             }
             WebsocketMessage::SlotUpdate(update) => {
@@ -187,7 +190,7 @@ pub fn process_events(
                     _ => None,
                 };
                 if let Some(message) = message {
-                    slot_queue_sender.send(message).unwrap();
+                    slot_queue_sender.send(message).await.expect("send success");
                 }
             }
         }

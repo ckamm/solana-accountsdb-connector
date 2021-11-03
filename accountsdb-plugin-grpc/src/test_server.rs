@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let svc = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
 
     tokio::spawn(async move {
-        let mut slot = 0;
+        let mut slot = 1;
         loop {
             if sender.receiver_count() > 0 {
                 println!("sending...");
