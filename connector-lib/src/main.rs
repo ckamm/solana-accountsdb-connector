@@ -3,10 +3,11 @@ mod postgres_target;
 mod websocket_source;
 
 use {
+    async_trait::async_trait,
     log::*,
     serde_derive::Deserialize,
     solana_sdk::{account::Account, pubkey::Pubkey},
-    std::{fs::File, io::Read},
+    std::{fs::File, io::Read, sync::Arc},
 };
 
 trait AnyhowWrap {
@@ -33,7 +34,7 @@ pub struct AccountWrite {
     pub data: Vec<u8>,
 }
 
-impl crate::AccountWrite {
+impl AccountWrite {
     fn from(pubkey: Pubkey, slot: u64, write_version: i64, account: Account) -> AccountWrite {
         AccountWrite {
             pubkey,
@@ -63,6 +64,74 @@ pub struct Config {
     rpc_ws_url: String,
 }
 
+#[async_trait]
+pub trait AccountTable: Sync + Send {
+    fn table_name(&self) -> &str;
+    async fn insert_account_write(
+        &self,
+        client: &postgres_query::Caching<tokio_postgres::Client>,
+        account_write: &AccountWrite,
+    ) -> Result<(), anyhow::Error>;
+}
+
+pub type AccountTables = Vec<Arc<dyn AccountTable>>;
+
+struct RawAccountTable {}
+
+#[async_trait]
+impl AccountTable for RawAccountTable {
+    fn table_name(&self) -> &str {
+        "account_write"
+    }
+
+    async fn insert_account_write(
+        &self,
+        client: &postgres_query::Caching<tokio_postgres::Client>,
+        account_write: &AccountWrite,
+    ) -> Result<(), anyhow::Error> {
+        let pubkey: &[u8] = &account_write.pubkey.to_bytes();
+        let owner: &[u8] = &account_write.owner.to_bytes();
+
+        // TODO: should update for same write_version to work with websocket input
+        let query = postgres_query::query!(
+            "
+            INSERT INTO account_write
+            (pubkey, slot, write_version, owner, lamports, executable, rent_epoch, data)
+            VALUES
+            ($pubkey, $slot, $write_version, $owner, $lamports, $executable, $rent_epoch, $data)
+            ON CONFLICT (pubkey, slot, write_version) DO NOTHING",
+            pubkey,
+            slot = account_write.slot,
+            write_version = account_write.write_version,
+            owner,
+            lamports = account_write.lamports,
+            executable = account_write.executable,
+            rent_epoch = account_write.rent_epoch,
+            data = account_write.data,
+        );
+        let _ = query.execute(client).await?;
+        Ok(())
+    }
+}
+
+struct MangoAccountTable {}
+
+#[async_trait]
+impl AccountTable for MangoAccountTable {
+    fn table_name(&self) -> &str {
+        "mango_account_write"
+    }
+
+    async fn insert_account_write(
+        &self,
+        client: &postgres_query::Caching<tokio_postgres::Client>,
+        account_write: &AccountWrite,
+    ) -> Result<(), anyhow::Error> {
+        info!("custom fn");
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = std::env::args().collect();
@@ -81,8 +150,11 @@ async fn main() -> Result<(), anyhow::Error> {
     solana_logger::setup_with_default("info");
     info!("startup");
 
+    //let custom_account_tables: AccountTables = vec![Arc::new(MangoAccountTable {})];
+    let account_tables: AccountTables = vec![Arc::new(RawAccountTable {})];
+
     let (account_write_queue_sender, slot_queue_sender) =
-        postgres_target::init(&config.postgres_connection_string).await?;
+        postgres_target::init(&config.postgres_connection_string, account_tables).await?;
 
     info!("postgres done");
     let use_accountsdb = true;

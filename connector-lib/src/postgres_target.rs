@@ -1,9 +1,9 @@
 use anyhow::Context;
 use log::*;
-use postgres_query::{query, FromSqlRow};
+use postgres_query::{query, query_dyn};
 use std::{collections::HashMap, time::Duration};
 
-use crate::{AccountWrite, SlotUpdate};
+use crate::{AccountTable, AccountTables, AccountWrite, SlotUpdate};
 
 async fn postgres_connection(
     connection_string: &str,
@@ -65,27 +65,12 @@ async fn update_postgres_client<'a>(
 async fn process_account_write(
     client: &postgres_query::Caching<tokio_postgres::Client>,
     write: &AccountWrite,
+    account_tables: &AccountTables,
 ) -> Result<(), anyhow::Error> {
-    let pubkey: &[u8] = &write.pubkey.to_bytes();
-    let owner: &[u8] = &write.owner.to_bytes();
+    for account_table in account_tables {
+        let _ = account_table.insert_account_write(client, write).await?;
+    }
 
-    let query = query!(
-        " \
-        INSERT INTO account_write \
-        (pubkey, slot, write_version, owner, lamports, executable, rent_epoch, data) \
-        VALUES \
-        ($pubkey, $slot, $write_version, $owner, $lamports, $executable, $rent_epoch, $data) \
-        ON CONFLICT (pubkey, slot, write_version) DO NOTHING", // TODO: should update for same write_version to work with websocket input
-        pubkey,
-        slot = write.slot,
-        write_version = write.write_version,
-        owner,
-        lamports = write.lamports,
-        executable = write.executable,
-        rent_epoch = write.rent_epoch,
-        data = write.data,
-    );
-    let _ = query.execute(client).await?;
     Ok(())
 }
 
@@ -94,9 +79,36 @@ struct SlotsProcessing {
     slots: HashMap<i64, SlotUpdate>,
     newest_nonfinal_slot: Option<i64>,
     newest_final_slot: Option<i64>,
+    cleanup_table_sql: Vec<String>,
 }
 
 impl SlotsProcessing {
+    fn set_cleanup_tables(&mut self, tables: &Vec<String>) {
+        self.cleanup_table_sql = tables
+            .iter()
+            .map(|table_name| {
+                format!(
+                    "
+                    DELETE FROM {table} AS data
+                    USING (
+                        SELECT DISTINCT ON(pubkey) pubkey, slot, write_version
+                        FROM {table}
+                        INNER JOIN slot USING(slot)
+                        WHERE slot <= $newest_final_slot AND status = 'rooted'
+                        ORDER BY pubkey, slot DESC, write_version DESC
+                        ) latest_write
+                    WHERE data.pubkey = latest_write.pubkey
+                    AND (data.slot < latest_write.slot
+                        OR (data.slot = latest_write.slot
+                            AND data.write_version < latest_write.write_version
+                        )
+                    )",
+                    table = table_name
+                )
+            })
+            .collect();
+    }
+
     async fn process(
         &mut self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
@@ -139,28 +151,13 @@ impl SlotsProcessing {
 
             // Keep only the most recent final write per pubkey
             if self.newest_final_slot.unwrap_or(-1) < update.slot {
-                let query = query!(
-                    " \
-                    DELETE FROM account_write \
-                    USING ( \
-                        SELECT DISTINCT ON(pubkey) pubkey, slot, write_version \
-                        FROM account_write \
-                        INNER JOIN slot USING(slot) \
-                        WHERE slot <= $newest_final_slot AND status = 'rooted' \
-                        ORDER BY pubkey, slot DESC, write_version DESC \
-                        ) latest_write \
-                    WHERE account_write.pubkey = latest_write.pubkey \
-                    AND (account_write.slot < latest_write.slot \
-                        OR (account_write.slot = latest_write.slot \
-                            AND account_write.write_version < latest_write.write_version \
-                        ) \
-                    )",
-                    newest_final_slot = update.slot,
-                );
-                let _ = query
-                    .execute(client)
-                    .await
-                    .context("deleting old account writes")?;
+                for cleanup_sql in &self.cleanup_table_sql {
+                    let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot,)?;
+                    let _ = query
+                        .execute(client)
+                        .await
+                        .context("deleting old account writes")?;
+                }
 
                 self.newest_final_slot = Some(update.slot);
             }
@@ -219,6 +216,7 @@ impl SlotsProcessing {
 
 pub async fn init(
     connection_string: &str,
+    account_tables: AccountTables,
 ) -> Result<
     (
         async_channel::Sender<AccountWrite>,
@@ -240,6 +238,7 @@ pub async fn init(
     for _ in 0..4 {
         let postgres_account_writes = postgres_connection(connection_string).await?;
         let account_write_queue_receiver_c = account_write_queue_receiver.clone();
+        let account_tables_c = account_tables.clone();
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
@@ -257,7 +256,8 @@ pub async fn init(
                 loop {
                     let client =
                         update_postgres_client(&mut client_opt, &postgres_account_writes).await;
-                    if let Err(err) = process_account_write(client, &write).await {
+                    if let Err(err) = process_account_write(client, &write, &account_tables_c).await
+                    {
                         error_count += 1;
                         if error_count - 1 < 3 {
                             warn!("failed to process account write, retrying: {:?}", err);
@@ -275,9 +275,15 @@ pub async fn init(
     }
 
     // slot update handling thread
+    let mut table_names: Vec<String> = account_tables
+        .iter()
+        .map(|table| table.table_name().to_string())
+        .collect();
     tokio::spawn(async move {
         let mut slots_processing = SlotsProcessing::default();
         let mut client_opt = None;
+
+        slots_processing.set_cleanup_tables(&table_names);
 
         loop {
             let update = slot_queue_receiver

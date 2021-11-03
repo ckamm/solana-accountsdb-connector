@@ -35,10 +35,11 @@ log = "0.4"
 prost = "0.9"
 futures-core = "0.3"
 futures-util = "0.3"
-async-stream = "0.2"
 rand = "0.7"
 anyhow = "1.0"
+async-stream = "0.2"
 async-channel = "1.6"
+async-trait = "0.1"
 
 [build-dependencies]
 tonic-build = "0.6"

@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         update_oneof: Some(UpdateOneof::SlotUpdate(SlotUpdate {
                             slot: slot,
                             parent: Some(parent),
-                            status: 0,
+                            status: rand::thread_rng().gen_range(0..=2),
                         })),
                     })
                     .unwrap();

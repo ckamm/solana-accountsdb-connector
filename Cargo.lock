@@ -3918,6 +3918,7 @@ dependencies = [
  "anyhow",
  "async-channel",
  "async-stream 0.2.1",
+ "async-trait",
  "bs58 0.3.1",
  "fixed",
  "futures 0.3.17",
