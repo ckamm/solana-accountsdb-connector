@@ -43,6 +43,7 @@ anyhow = "1.0"
 async-stream = "0.2"
 async-channel = "1.6"
 async-trait = "0.1"
+bytes = "1.0"
 
 # The v3.2 branch currently has a conflicting syn version dependency, use a fixed version
 mango = { git = "https://github.com/ckamm/mango-v3", rev = "2e1e4886544bdb1c5f773a3856305210f622fa94" }

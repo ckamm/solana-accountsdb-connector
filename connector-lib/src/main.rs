@@ -116,6 +116,7 @@ impl AccountTable for RawAccountTable {
     }
 }
 
+use postgres_types::ToSql;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = std::env::args().collect();
@@ -134,7 +135,12 @@ async fn main() -> Result<(), anyhow::Error> {
     solana_logger::setup_with_default("info");
     info!("startup");
 
-    let account_tables: AccountTables = vec![Arc::new(RawAccountTable {}), Arc::new(mango::MangoAccountTable {})];
+    let account_tables: AccountTables = vec![
+        Arc::new(RawAccountTable {}),
+        Arc::new(mango::MangoAccountTable {}),
+        Arc::new(mango::MangoGroupTable {}),
+        Arc::new(mango::MangoCacheTable {}),
+    ];
     //let account_tables: AccountTables = vec![Arc::new(RawAccountTable {})];
 
     let (account_write_queue_sender, slot_queue_sender) =
