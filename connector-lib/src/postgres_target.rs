@@ -68,6 +68,7 @@ async fn process_account_write(
     account_tables: &AccountTables,
 ) -> Result<(), anyhow::Error> {
     for account_table in account_tables {
+        // TODO: Could run all these in parallel instead of sequentially
         let _ = account_table.insert_account_write(client, write).await?;
     }
 
@@ -275,7 +276,7 @@ pub async fn init(
     }
 
     // slot update handling thread
-    let mut table_names: Vec<String> = account_tables
+    let table_names: Vec<String> = account_tables
         .iter()
         .map(|table| table.table_name().to_string())
         .collect();

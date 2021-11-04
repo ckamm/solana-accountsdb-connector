@@ -2,6 +2,8 @@ mod grpc_plugin_source;
 mod postgres_target;
 mod websocket_source;
 
+mod mango;
+
 use {
     async_trait::async_trait,
     log::*,
@@ -114,24 +116,6 @@ impl AccountTable for RawAccountTable {
     }
 }
 
-struct MangoAccountTable {}
-
-#[async_trait]
-impl AccountTable for MangoAccountTable {
-    fn table_name(&self) -> &str {
-        "mango_account_write"
-    }
-
-    async fn insert_account_write(
-        &self,
-        client: &postgres_query::Caching<tokio_postgres::Client>,
-        account_write: &AccountWrite,
-    ) -> Result<(), anyhow::Error> {
-        info!("custom fn");
-        Ok(())
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = std::env::args().collect();
@@ -150,8 +134,8 @@ async fn main() -> Result<(), anyhow::Error> {
     solana_logger::setup_with_default("info");
     info!("startup");
 
-    //let custom_account_tables: AccountTables = vec![Arc::new(MangoAccountTable {})];
-    let account_tables: AccountTables = vec![Arc::new(RawAccountTable {})];
+    let account_tables: AccountTables = vec![Arc::new(RawAccountTable {}), Arc::new(mango::MangoAccountTable {})];
+    //let account_tables: AccountTables = vec![Arc::new(RawAccountTable {})];
 
     let (account_write_queue_sender, slot_queue_sender) =
         postgres_target::init(&config.postgres_connection_string, account_tables).await?;
