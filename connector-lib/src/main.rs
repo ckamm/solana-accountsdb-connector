@@ -80,6 +80,10 @@ pub type AccountTables = Vec<Arc<dyn AccountTable>>;
 
 struct RawAccountTable {}
 
+pub fn encode_address(addr: &Pubkey) -> String {
+    bs58::encode(&addr.to_bytes()).into_string()
+}
+
 #[async_trait]
 impl AccountTable for RawAccountTable {
     fn table_name(&self) -> &str {
@@ -91,8 +95,8 @@ impl AccountTable for RawAccountTable {
         client: &postgres_query::Caching<tokio_postgres::Client>,
         account_write: &AccountWrite,
     ) -> Result<(), anyhow::Error> {
-        let pubkey: &[u8] = &account_write.pubkey.to_bytes();
-        let owner: &[u8] = &account_write.owner.to_bytes();
+        let pubkey = encode_address(&account_write.pubkey);
+        let owner = encode_address(&account_write.owner);
 
         // TODO: should update for same write_version to work with websocket input
         let query = postgres_query::query!(

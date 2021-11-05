@@ -4,10 +4,10 @@
 
 -- The table storing account writes, keeping only the newest write_version per slot
 CREATE TABLE account_write (
-    pubkey BYTEA NOT NULL,
+    pubkey VARCHAR(44) NOT NULL,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
-    owner BYTEA,
+    owner VARCHAR(44),
     lamports BIGINT NOT NULL,
     executable BOOL NOT NULL,
     rent_epoch BIGINT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE account_write (
 CREATE TABLE slot (
     slot BIGINT PRIMARY KEY,
     parent BIGINT,
-    status varchar(16) NOT NULL,
+    status VARCHAR(16) NOT NULL,
     uncle BOOL NOT NULL
 );
 
@@ -36,19 +36,19 @@ CREATE TYPE "PerpAccount" AS (
 );
 
 CREATE TABLE mango_account_write (
-    pubkey BYTEA NOT NULL,
+    pubkey VARCHAR(44) NOT NULL,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     version INT2,
     is_initialized BOOL,
     extra_info BYTEA,
-    mango_group BYTEA,
-    owner BYTEA,
+    mango_group VARCHAR(44),
+    owner VARCHAR(44),
     in_margin_basket BOOL[],
     num_in_margin_basket INT2,
     deposits NUMERIC[], -- I80F48[]
     borrows NUMERIC[], -- I80F48[]
-    spot_open_orders BYTEA[],
+    spot_open_orders VARCHAR(44)[],
     perp_accounts "PerpAccount"[],
     order_market INT2[],
     order_side INT2[],
@@ -58,21 +58,21 @@ CREATE TABLE mango_account_write (
     being_liquidated BOOL,
     is_bankrupt BOOL,
     info BYTEA,
-    advanced_orders_key BYTEA,
+    advanced_orders_key VARCHAR(44),
     padding BYTEA,
     PRIMARY KEY (pubkey, slot, write_version)
 );
 
 
 CREATE TYPE "TokenInfo" AS (
-    mint BYTEA,
-    root_bank BYTEA,
+    mint VARCHAR(44),
+    root_bank VARCHAR(44),
     decimals INT2,
     padding BYTEA
 );
 
 CREATE TYPE "SpotMarketInfo" AS (
-    spot_market BYTEA,
+    spot_market VARCHAR(44),
     maint_asset_weight NUMERIC, -- all I80F48
     init_asset_weight NUMERIC,
     maint_liab_weight NUMERIC,
@@ -81,7 +81,7 @@ CREATE TYPE "SpotMarketInfo" AS (
 );
 
 CREATE TYPE "PerpMarketInfo" AS (
-    perp_market BYTEA,
+    perp_market VARCHAR(44),
     maint_asset_weight NUMERIC, -- all I80F48
     init_asset_weight NUMERIC,
     maint_liab_weight NUMERIC,
@@ -94,7 +94,7 @@ CREATE TYPE "PerpMarketInfo" AS (
 );
 
 CREATE TABLE mango_group_write (
-    pubkey BYTEA NOT NULL,
+    pubkey VARCHAR(44) NOT NULL,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     version INT2,
@@ -104,17 +104,17 @@ CREATE TABLE mango_group_write (
     tokens "TokenInfo"[],
     spot_markets "SpotMarketInfo"[],
     perp_markets "PerpMarketInfo"[],
-    oracles BYTEA[],
+    oracles VARCHAR(44)[],
     signer_nonce NUMERIC, -- u64
-    signer_key BYTEA,
-    "admin" BYTEA,
-    dex_program_id BYTEA,
-    mango_cache BYTEA,
+    signer_key VARCHAR(44),
+    "admin" VARCHAR(44),
+    dex_program_id VARCHAR(44),
+    mango_cache VARCHAR(44),
     valid_interval NUMERIC, -- u64
-    insurance_vault BYTEA,
-    srm_vault BYTEA,
-    msrm_vault BYTEA,
-    fees_vault BYTEA,
+    insurance_vault VARCHAR(44),
+    srm_vault VARCHAR(44),
+    msrm_vault VARCHAR(44),
+    fees_vault VARCHAR(44),
     padding BYTEA,
     PRIMARY KEY (pubkey, slot, write_version)
 );
@@ -137,7 +137,7 @@ CREATE TYPE "PerpMarketCache" AS (
 );
 
 CREATE TABLE mango_cache_write (
-    pubkey BYTEA NOT NULL,
+    pubkey VARCHAR(44) NOT NULL,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     version INT2,

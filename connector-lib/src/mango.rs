@@ -10,7 +10,7 @@ use {
     std::{cmp, error, mem},
 };
 
-use crate::{AccountTable, AccountWrite};
+use crate::{encode_address, AccountTable, AccountWrite};
 
 #[derive(Debug, Clone)]
 pub struct SqlNumericI80F48(pub I80F48);
@@ -262,11 +262,11 @@ impl AccountTable for MangoAccountTable {
 
         // TODO: Also filter on mango_group?
 
-        let pubkey: &[u8] = &account_write.pubkey.to_bytes();
+        let pubkey = encode_address(&account_write.pubkey);
         let data = MangoAccount::load_from_bytes(&account_write.data)?;
 
-        let owner: &[u8] = &data.owner.to_bytes();
-        let mango_group: &[u8] = &data.mango_group.to_bytes();
+        let owner = encode_address(&data.owner);
+        let mango_group = encode_address(&data.mango_group);
         let version = data.meta_data.version as i16;
         let extra_info = &data.meta_data.extra_info as &[u8];
         let in_margin_basket = &data.in_margin_basket as &[bool];
@@ -284,8 +284,8 @@ impl AccountTable for MangoAccountTable {
         let spot_open_orders = data
             .spot_open_orders
             .iter()
-            .map(|key| key.to_bytes().to_vec())
-            .collect::<Vec<Vec<u8>>>();
+            .map(|key| encode_address(&key))
+            .collect::<Vec<String>>();
         let perp_accounts = data
             .perp_accounts
             .iter()
@@ -323,7 +323,7 @@ impl AccountTable for MangoAccountTable {
             .collect::<Vec<SqlNumericU64>>();
         let msrm_amount = SqlNumericU64(data.msrm_amount);
         let info = &data.info as &[u8];
-        let advanced_orders_key = &data.advanced_orders_key.to_bytes() as &[u8];
+        let advanced_orders_key = encode_address(&data.advanced_orders_key);
         let padding = &data.padding as &[u8];
 
         let query = postgres_query::query!(
@@ -379,14 +379,14 @@ impl AccountTable for MangoAccountTable {
 
 #[derive(Debug, ToSql)]
 struct TokenInfo {
-    mint: Vec<u8>,
-    root_bank: Vec<u8>,
+    mint: String,
+    root_bank: String,
     decimals: i16,
     padding: Vec<u8>,
 }
 #[derive(Debug, ToSql)]
 struct SpotMarketInfo {
-    spot_market: Vec<u8>,
+    spot_market: String,
     maint_asset_weight: SqlNumericI80F48,
     init_asset_weight: SqlNumericI80F48,
     maint_liab_weight: SqlNumericI80F48,
@@ -395,7 +395,7 @@ struct SpotMarketInfo {
 }
 #[derive(Debug, ToSql)]
 struct PerpMarketInfo {
-    perp_market: Vec<u8>,
+    perp_market: String,
     maint_asset_weight: SqlNumericI80F48,
     init_asset_weight: SqlNumericI80F48,
     maint_liab_weight: SqlNumericI80F48,
@@ -428,7 +428,7 @@ impl AccountTable for MangoGroupTable {
 
         // TODO: Also filter on mango_group pubkey?
 
-        let pubkey: &[u8] = &account_write.pubkey.to_bytes();
+        let pubkey = encode_address(&account_write.pubkey);
         let data = MangoGroup::load_from_bytes(&account_write.data)?;
         let version = data.meta_data.version as i16;
         let extra_info = &data.meta_data.extra_info as &[u8];
@@ -437,8 +437,8 @@ impl AccountTable for MangoGroupTable {
             .tokens
             .iter()
             .map(|token| TokenInfo {
-                mint: token.mint.to_bytes().to_vec(),
-                root_bank: token.root_bank.to_bytes().to_vec(),
+                mint: encode_address(&token.mint),
+                root_bank: encode_address(&token.root_bank),
                 decimals: token.decimals as i16,
                 padding: token.padding.to_vec(),
             })
@@ -447,7 +447,7 @@ impl AccountTable for MangoGroupTable {
             .spot_markets
             .iter()
             .map(|market| SpotMarketInfo {
-                spot_market: market.spot_market.to_bytes().to_vec(),
+                spot_market: encode_address(&market.spot_market),
                 maint_asset_weight: SqlNumericI80F48(market.maint_asset_weight),
                 init_asset_weight: SqlNumericI80F48(market.init_asset_weight),
                 maint_liab_weight: SqlNumericI80F48(market.maint_liab_weight),
@@ -459,7 +459,7 @@ impl AccountTable for MangoGroupTable {
             .perp_markets
             .iter()
             .map(|market| PerpMarketInfo {
-                perp_market: market.perp_market.to_bytes().to_vec(),
+                perp_market: encode_address(&market.perp_market),
                 maint_asset_weight: SqlNumericI80F48(market.maint_asset_weight),
                 init_asset_weight: SqlNumericI80F48(market.init_asset_weight),
                 maint_liab_weight: SqlNumericI80F48(market.maint_liab_weight),
@@ -474,18 +474,18 @@ impl AccountTable for MangoGroupTable {
         let oracles = data
             .oracles
             .iter()
-            .map(|key| key.to_bytes().to_vec())
-            .collect::<Vec<Vec<u8>>>();
+            .map(|key| encode_address(&key))
+            .collect::<Vec<String>>();
         let signer_nonce = SqlNumericU64(data.signer_nonce);
-        let signer_key: &[u8] = &data.signer_key.to_bytes();
-        let admin: &[u8] = &data.admin.to_bytes();
-        let dex_program_id: &[u8] = &data.dex_program_id.to_bytes();
-        let mango_cache: &[u8] = &data.mango_cache.to_bytes();
+        let signer_key = encode_address(&data.signer_key);
+        let admin = encode_address(&data.admin);
+        let dex_program_id = encode_address(&data.dex_program_id);
+        let mango_cache = encode_address(&data.mango_cache);
         let valid_interval = SqlNumericU64(data.valid_interval);
-        let insurance_vault: &[u8] = &data.insurance_vault.to_bytes();
-        let srm_vault: &[u8] = &data.srm_vault.to_bytes();
-        let msrm_vault: &[u8] = &data.msrm_vault.to_bytes();
-        let fees_vault: &[u8] = &data.fees_vault.to_bytes();
+        let insurance_vault = encode_address(&data.insurance_vault);
+        let srm_vault = encode_address(&data.srm_vault);
+        let msrm_vault = encode_address(&data.msrm_vault);
+        let fees_vault = encode_address(&data.fees_vault);
         let padding = &data.padding as &[u8];
 
         let query = postgres_query::query!(
@@ -574,7 +574,7 @@ impl AccountTable for MangoCacheTable {
 
         // TODO: This one can't be fitlered to only use the one for our mango_group?
 
-        let pubkey: &[u8] = &account_write.pubkey.to_bytes();
+        let pubkey = encode_address(&account_write.pubkey);
         let data = MangoCache::load_from_bytes(&account_write.data)?;
         let version = data.meta_data.version as i16;
         let extra_info = &data.meta_data.extra_info as &[u8];
