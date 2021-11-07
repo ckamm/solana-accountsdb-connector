@@ -2,11 +2,9 @@ use {
     async_trait::async_trait,
     bytes::{BufMut, BytesMut},
     fixed::types::I80F48,
-    log::*,
     mango::state::{DataType, MangoAccount, MangoCache, MangoGroup},
     mango_common::Loadable,
     postgres_types::{IsNull, ToSql, Type},
-    solana_sdk::pubkey::Pubkey,
     std::{cmp, error, mem},
 };
 

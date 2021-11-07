@@ -5,7 +5,6 @@ use {
         SlotUpdate, SubscribeRequest, Update,
     },
     bs58,
-    futures_util::FutureExt,
     log::*,
     serde_derive::Deserialize,
     serde_json,
@@ -14,7 +13,7 @@ use {
         Result as PluginResult, SlotStatus,
     },
     std::{fs::File, io::Read},
-    tokio::sync::{broadcast, mpsc, oneshot},
+    tokio::sync::{broadcast, mpsc},
     tonic::transport::Server,
 };
 
@@ -83,9 +82,9 @@ pub mod accountsdb_service {
 }
 
 pub struct PluginData {
-    runtime: tokio::runtime::Runtime,
+    runtime: Option<tokio::runtime::Runtime>,
     server_broadcast: broadcast::Sender<Update>,
-    server_exit_sender: Option<oneshot::Sender<()>>,
+    server_exit_sender: Option<broadcast::Sender<()>>,
     accounts_selector: AccountsSelector,
 }
 
@@ -152,29 +151,35 @@ impl AccountsDbPlugin for Plugin {
         })?;
 
         let service = accountsdb_service::Service::new(config.service_config);
-        let (server_exit_sender, server_exit_receiver) = oneshot::channel::<()>();
+        let (server_exit_sender, mut server_exit_receiver) = broadcast::channel::<()>(1);
         let server_broadcast = service.sender.clone();
 
         let server = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.spawn(
-            Server::builder()
-                .add_service(server)
-                .serve_with_shutdown(addr, server_exit_receiver.map(drop)),
-        );
+        runtime.spawn(Server::builder().add_service(server).serve_with_shutdown(
+            addr,
+            async move {
+                let _ = server_exit_receiver.recv().await;
+            },
+        ));
         let server_broadcast_c = server_broadcast.clone();
+        let mut server_exit_receiver = server_exit_sender.subscribe();
         runtime.spawn(async move {
             loop {
                 // Don't care about the error if there are no receivers.
                 let _ = server_broadcast_c.send(Update {
                     update_oneof: Some(UpdateOneof::Ping(Ping {})),
                 });
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+                tokio::select! {
+                    _ = server_exit_receiver.recv() => { break; },
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
+                }
             }
         });
 
         self.data = Some(PluginData {
-            runtime,
+            runtime: Some(runtime),
             server_broadcast,
             server_exit_sender: Some(server_exit_sender),
             accounts_selector,
@@ -186,14 +191,17 @@ impl AccountsDbPlugin for Plugin {
     fn on_unload(&mut self) {
         info!("Unloading plugin: {:?}", self.name());
 
-        let data = self.data.as_mut().expect("plugin must be initialized");
+        let mut data = self.data.take().expect("plugin must be initialized");
         data.server_exit_sender
             .take()
             .expect("on_unload can only be called once")
             .send(())
             .expect("sending grpc server termination should succeed");
 
-        // TODO: explicitly shut down runtime?
+        data.runtime
+            .take()
+            .expect("must exist")
+            .shutdown_background();
     }
 
     fn update_account(

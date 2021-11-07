@@ -3,7 +3,7 @@ use log::*;
 use postgres_query::{query, query_dyn};
 use std::{collections::HashMap, time::Duration};
 
-use crate::{AccountTable, AccountTables, AccountWrite, SlotUpdate};
+use crate::{AccountTables, AccountWrite, SlotUpdate};
 
 async fn postgres_connection(
     connection_string: &str,

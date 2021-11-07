@@ -120,7 +120,6 @@ impl AccountTable for RawAccountTable {
     }
 }
 
-use postgres_types::ToSql;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args: Vec<String> = std::env::args().collect();
