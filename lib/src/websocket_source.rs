@@ -30,8 +30,7 @@ async fn feed_data(
     config: &Config,
     sender: async_channel::Sender<WebsocketMessage>,
 ) -> Result<(), anyhow::Error> {
-    let program_id = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68")?;
-    //let mango_group_address = Pubkey::from_str("98pjRuQjK3qA6gXts96PqZT4Ze5QmnCmt3QYjhbUSPue")?;
+    let program_id = Pubkey::from_str(&config.program_id)?;
     let snapshot_duration = Duration::from_secs(300);
 
     let connect = ws::try_connect::<RpcSolPubSubClient>(&config.rpc_ws_url).map_err_anyhow()?;
@@ -48,9 +47,7 @@ async fn feed_data(
     };
     // TODO: Make addresses filters configurable
     let program_accounts_config = RpcProgramAccountsConfig {
-        filters: None, /*Some(vec![RpcFilterType::DataSize(
-                           size_of::<MangoAccount>() as u64
-                       )]),*/
+        filters: None,
         with_context: Some(true),
         account_config: account_info_config.clone(),
     };

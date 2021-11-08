@@ -1,8 +1,8 @@
 Overview
 ========
 
-This project is about streaming Solana account updates into other databases or
-event queues.
+This project is about streaming Solana account updates for a specific program
+into other databases or event queues.
 
 Supported Solana sources:
 - AccountsDB plugin (preferred) plus JSONRPC HTTP API (for initial snapshots)

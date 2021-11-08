@@ -1,0 +1,7 @@
+{
+	"postgres_connection_string": "host=/var/run/postgresql",
+	"grpc_connection_string": "http://[::1]:10000",
+	"rpc_http_url": "",
+	"rpc_ws_url": "",
+	"program_id": "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68"
+}

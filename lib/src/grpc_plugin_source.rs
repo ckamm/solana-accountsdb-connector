@@ -27,13 +27,15 @@ enum Message {
     Snapshot(SnapshotData),
 }
 
-async fn get_snapshot(rpc_http_url: String, min_slot: u64) -> Result<SnapshotData, anyhow::Error> {
+async fn get_snapshot(
+    rpc_http_url: String,
+    program_id: Pubkey,
+    min_slot: u64,
+) -> Result<SnapshotData, anyhow::Error> {
     let rpc_client = http::connect_with_options::<FullClient>(&rpc_http_url, true)
         .await
         .map_err_anyhow()?;
 
-    // TODO: Make addresses filters configurable
-    let program_id = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68")?;
     let account_info_config = RpcAccountInfoConfig {
         encoding: Some(UiAccountEncoding::Base64),
         commitment: Some(CommitmentConfig::processed()),
@@ -72,6 +74,8 @@ async fn feed_data_accountsdb(
     config: &Config,
     sender: async_channel::Sender<Message>,
 ) -> Result<(), anyhow::Error> {
+    let program_id = Pubkey::from_str(&config.program_id)?;
+
     let mut client =
         AccountsDbClient::connect(Endpoint::from_str(&config.grpc_connection_string)?).await?;
 
@@ -98,7 +102,7 @@ async fn feed_data_accountsdb(
                         let update = update?;
                         if let UpdateOneof::SlotUpdate(slot_update) = update.update_oneof.as_ref().expect("invalid grpc") {
                             if trigger_snapshot_on_slot && slot_update.status == Status::Processed as i32 {
-                                snapshot_future = tokio::spawn(get_snapshot(config.rpc_http_url.clone(), slot_update.slot)).fuse();
+                                snapshot_future = tokio::spawn(get_snapshot(config.rpc_http_url.clone(), program_id, slot_update.slot)).fuse();
                                 trigger_snapshot_on_slot = false;
                             }
                         }
