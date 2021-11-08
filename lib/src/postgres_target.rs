@@ -93,8 +93,7 @@ impl SlotsProcessing {
             .iter()
             .map(|table_name| {
                 format!(
-                    "
-                    DELETE FROM {table} AS data
+                    "DELETE FROM {table} AS data
                     USING (
                         SELECT DISTINCT ON(pubkey) pubkey, slot, write_version
                         FROM {table}
@@ -121,12 +120,11 @@ impl SlotsProcessing {
     ) -> Result<(), anyhow::Error> {
         if let Some(parent) = update.parent {
             let query = query!(
-                " \
-                INSERT INTO slot \
-                    (slot, parent, status, uncle) \
-                VALUES \
-                    ($slot, $parent, $status, FALSE) \
-                ON CONFLICT (slot) DO UPDATE SET \
+                "INSERT INTO slot
+                    (slot, parent, status, uncle)
+                VALUES
+                    ($slot, $parent, $status, FALSE)
+                ON CONFLICT (slot) DO UPDATE SET
                     parent=$parent, status=$status",
                 slot = update.slot,
                 parent = parent,
@@ -135,12 +133,11 @@ impl SlotsProcessing {
             let _ = query.execute(client).await.context("updating slot row")?;
         } else {
             let query = query!(
-                " \
-                INSERT INTO slot \
-                    (slot, parent, status, uncle) \
-                VALUES \
-                    ($slot, NULL, $status, FALSE) \
-                ON CONFLICT (slot) DO UPDATE SET \
+                "INSERT INTO slot
+                    (slot, parent, status, uncle)
+                VALUES
+                    ($slot, NULL, $status, FALSE)
+                ON CONFLICT (slot) DO UPDATE SET
                     status=$status",
                 slot = update.slot,
                 status = update.status,
@@ -187,8 +184,8 @@ impl SlotsProcessing {
             if new_newest_slot || parent_update {
                 // update the uncle column for the chain of slots from the
                 // newest down the the first rooted slot
-                let query = query!("\
-                    WITH RECURSIVE
+                let query = query!(
+                    "WITH RECURSIVE
                         liveslots AS (
                             SELECT slot.*, 0 AS depth FROM slot
                                 WHERE slot = (SELECT max(slot) FROM slot)
