@@ -227,7 +227,6 @@ impl AccountsDbPlugin for Plugin {
                     slot,
                 );
 
-                // TODO: send the update to all connected streams
                 data.broadcast(UpdateOneof::AccountWrite(AccountWrite {
                     slot,
                     is_startup,

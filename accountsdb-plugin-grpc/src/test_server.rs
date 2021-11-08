@@ -40,7 +40,6 @@ pub mod accountsdb_service {
             let mut broadcast_rx = self.sender.subscribe();
             tokio::spawn(async move {
                 loop {
-                    // TODO: Deal with lag! maybe just close if RecvError::Lagged happens
                     let msg = broadcast_rx.recv().await.unwrap();
                     tx.send(Ok(msg)).await.unwrap();
                 }
