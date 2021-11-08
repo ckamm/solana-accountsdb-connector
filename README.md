@@ -84,11 +84,13 @@ the chain.
 
 Example for querying confirmed data:
 ```
-SELECT DISTINCT ON(pubkey) *
+SELECT DISTINCT ON(pubkey_id)
+    pubkey, account_write.*
 FROM account_write
 INNER JOIN slot USING(slot)
+INNER JOIN pubkey USING(pubkey_id)
 WHERE status = 'Rooted' OR (uncle = FALSE AND status = 'Confirmed')
-ORDER BY pubkey, slot DESC, write_version DESC;
+ORDER BY pubkey_id, slot DESC, write_version DESC;
 ```
 
 For each pubkey, this gets the latest (most recent slot, most recent

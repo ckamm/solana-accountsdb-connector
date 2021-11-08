@@ -4,6 +4,9 @@
 
 DROP TABLE slot CASCADE;
 DROP TABLE account_write CASCADE;
+DROP TABLE pubkey CASCADE;
+DROP TYPE "SlotStatus";
+
 DROP TABLE mango_group_write CASCADE;
 DROP TABLE mango_cache_write CASCADE;
 DROP TABLE mango_account_write CASCADE;

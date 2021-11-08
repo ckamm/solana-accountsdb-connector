@@ -95,13 +95,13 @@ impl SlotsProcessing {
                 format!(
                     "DELETE FROM {table} AS data
                     USING (
-                        SELECT DISTINCT ON(pubkey) pubkey, slot, write_version
+                        SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
                         FROM {table}
                         INNER JOIN slot USING(slot)
                         WHERE slot <= $newest_final_slot AND status = 'Rooted'
-                        ORDER BY pubkey, slot DESC, write_version DESC
+                        ORDER BY pubkey_id, slot DESC, write_version DESC
                         ) latest_write
-                    WHERE data.pubkey = latest_write.pubkey
+                    WHERE data.pubkey_id = latest_write.pubkey_id
                     AND (data.slot < latest_write.slot
                         OR (data.slot = latest_write.slot
                             AND data.write_version < latest_write.write_version

@@ -327,24 +327,24 @@ impl AccountTable for MangoAccountTable {
         let query = postgres_query::query!(
             "
             INSERT INTO mango_account_write
-            (pubkey, slot, write_version,
-            version, is_initialized, extra_info, mango_group,
-            owner, in_margin_basket, num_in_margin_basket, deposits,
-            borrows, spot_open_orders, perp_accounts, order_market,
+            (pubkey_id, slot, write_version,
+            version, is_initialized, extra_info, mango_group_id,
+            owner_id, in_margin_basket, num_in_margin_basket, deposits,
+            borrows, spot_open_orders_ids, perp_accounts, order_market,
             order_side, orders, client_order_ids,
             msrm_amount, being_liquidated, is_bankrupt, info,
-            advanced_orders_key, padding
+            advanced_orders_key_id, padding
             )
             VALUES
-            ($pubkey, $slot, $write_version,
-            $version, $is_initialized, $extra_info, $mango_group,
-            $owner, $in_margin_basket, $num_in_margin_basket, $deposits,
-            $borrows, $spot_open_orders, $perp_accounts, $order_market,
+            (map_pubkey($pubkey), $slot, $write_version,
+            $version, $is_initialized, $extra_info, map_pubkey($mango_group),
+            map_pubkey($owner), $in_margin_basket, $num_in_margin_basket, $deposits,
+            $borrows, map_pubkey_arr($spot_open_orders), $perp_accounts, $order_market,
             $order_side, $orders, $client_order_ids,
             $msrm_amount, $being_liquidated, $is_bankrupt, $info,
-            $advanced_orders_key, $padding
+            map_pubkey($advanced_orders_key), $padding
             )
-            ON CONFLICT (pubkey, slot, write_version) DO NOTHING",
+            ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
             slot = account_write.slot,
             write_version = account_write.write_version,
@@ -489,22 +489,30 @@ impl AccountTable for MangoGroupTable {
         let query = postgres_query::query!(
             "
             INSERT INTO mango_group_write
-            (pubkey, slot, write_version,
+            (pubkey_id, slot, write_version,
             version, is_initialized, extra_info,
-            num_oracles, tokens, spot_markets, perp_markets,
-            oracles, signer_nonce, signer_key, \"admin\",
-            dex_program_id, mango_cache, valid_interval,
-            insurance_vault, srm_vault, msrm_vault, fees_vault,
+            num_oracles,
+            tokens,
+            spot_markets,
+            perp_markets,
+            oracle_ids, signer_nonce, signer_key_id, admin_id,
+            dex_program_id, mango_cache_id, valid_interval,
+            insurance_vault_id, srm_vault_id, msrm_vault_id,
+            fees_vault_id,
             padding)
             VALUES
-            ($pubkey, $slot, $write_version,
+            (map_pubkey($pubkey), $slot, $write_version,
             $version, $is_initialized, $extra_info,
-            $num_oracles, $tokens, $spot_markets, $perp_markets,
-            $oracles, $signer_nonce, $signer_key, $admin,
-            $dex_program_id, $mango_cache, $valid_interval,
-            $insurance_vault, $srm_vault, $msrm_vault, $fees_vault,
+            $num_oracles,
+            $tokens,
+            $spot_markets,
+            $perp_markets,
+            map_pubkey_arr($oracles), $signer_nonce, map_pubkey($signer_key), map_pubkey($admin),
+            map_pubkey($dex_program_id), map_pubkey($mango_cache), $valid_interval,
+            map_pubkey($insurance_vault), map_pubkey($srm_vault), map_pubkey($msrm_vault),
+            map_pubkey($fees_vault),
             $padding)
-            ON CONFLICT (pubkey, slot, write_version) DO NOTHING",
+            ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
             slot = account_write.slot,
             write_version = account_write.write_version,
@@ -606,14 +614,14 @@ impl AccountTable for MangoCacheTable {
         let query = postgres_query::query!(
             "
             INSERT INTO mango_cache_write
-            (pubkey, slot, write_version,
+            (pubkey_id, slot, write_version,
             version, is_initialized, extra_info,
             price_cache, root_bank_cache, perp_market_cache)
             VALUES
-            ($pubkey, $slot, $write_version,
+            (map_pubkey($pubkey), $slot, $write_version,
             $version, $is_initialized, $extra_info,
             $price_cache, $root_bank_cache, $perp_market_cache)
-            ON CONFLICT (pubkey, slot, write_version) DO NOTHING",
+            ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
             slot = account_write.slot,
             write_version = account_write.write_version,

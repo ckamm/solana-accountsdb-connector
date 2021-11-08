@@ -8,17 +8,60 @@ CREATE TYPE "SlotStatus" AS ENUM (
     'Processed'
 );
 
+CREATE TABLE pubkey (
+    pubkey_id BIGSERIAL PRIMARY KEY,
+    pubkey VARCHAR(44) NOT NULL UNIQUE
+);
+
+-- Returns a pubkey_id for a pubkey, by getting it from the table or inserting it.
+-- Getting this fully correct is complex, see:
+-- https://stackoverflow.com/questions/15939902/is-select-or-insert-in-a-function-prone-to-race-conditions/15950324
+-- and currently this function assumes there are no deletions in the pubkey table!
+CREATE OR REPLACE FUNCTION map_pubkey(_pubkey varchar(44), OUT _pubkey_id bigint)
+  LANGUAGE plpgsql AS
+$func$
+BEGIN
+   LOOP
+      SELECT pubkey_id
+      FROM   pubkey
+      WHERE  pubkey = _pubkey
+      INTO   _pubkey_id;
+
+      EXIT WHEN FOUND;
+
+      INSERT INTO pubkey AS t
+      (pubkey) VALUES (_pubkey)
+      ON     CONFLICT (pubkey) DO NOTHING
+      RETURNING t.pubkey_id
+      INTO   _pubkey_id;
+
+      EXIT WHEN FOUND;
+   END LOOP;
+END
+$func$;
+
+CREATE OR REPLACE FUNCTION map_pubkey_arr(_pubkey_arr varchar(44)[], OUT _pubkey_id_arr bigint[])
+  LANGUAGE plpgsql AS
+$func$
+BEGIN
+   FOR i IN array_lower(_pubkey_arr, 1)..array_upper(_pubkey_arr, 1) LOOP
+      _pubkey_id_arr[i] := map_pubkey(_pubkey_arr[i]);
+   END LOOP;
+END
+$func$
+RETURNS NULL ON NULL INPUT;
+
 -- The table storing account writes, keeping only the newest write_version per slot
 CREATE TABLE account_write (
-    pubkey VARCHAR(44) NOT NULL,
+    pubkey_id BIGINT NOT NULL REFERENCES pubkey,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
-    owner VARCHAR(44),
+    owner_id BIGINT REFERENCES pubkey,
     lamports BIGINT NOT NULL,
     executable BOOL NOT NULL,
     rent_epoch BIGINT NOT NULL,
     data BYTEA,
-    PRIMARY KEY (pubkey, slot, write_version)
+    PRIMARY KEY (pubkey_id, slot, write_version)
 );
 
 -- The table storing slot information
@@ -43,19 +86,19 @@ CREATE TYPE "PerpAccount" AS (
 );
 
 CREATE TABLE mango_account_write (
-    pubkey VARCHAR(44) NOT NULL,
+    pubkey_id BIGINT NOT NULL REFERENCES pubkey,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     version INT2,
     is_initialized BOOL,
     extra_info BYTEA,
-    mango_group VARCHAR(44),
-    owner VARCHAR(44),
+    mango_group_id BIGINT REFERENCES pubkey,
+    owner_id BIGINT REFERENCES pubkey,
     in_margin_basket BOOL[],
     num_in_margin_basket INT2,
     deposits NUMERIC[], -- I80F48[]
     borrows NUMERIC[], -- I80F48[]
-    spot_open_orders VARCHAR(44)[],
+    spot_open_orders_ids BIGINT[],
     perp_accounts "PerpAccount"[],
     order_market INT2[],
     order_side INT2[],
@@ -65,21 +108,21 @@ CREATE TABLE mango_account_write (
     being_liquidated BOOL,
     is_bankrupt BOOL,
     info BYTEA,
-    advanced_orders_key VARCHAR(44),
+    advanced_orders_key_id BIGINT REFERENCES pubkey,
     padding BYTEA,
-    PRIMARY KEY (pubkey, slot, write_version)
+    PRIMARY KEY (pubkey_id, slot, write_version)
 );
 
 
 CREATE TYPE "TokenInfo" AS (
-    mint VARCHAR(44),
-    root_bank VARCHAR(44),
+    mint varchar(44), -- TODO: also use pubkey table? but is unergonomic
+    root_bank varchar(44),
     decimals INT2,
     padding BYTEA
 );
 
 CREATE TYPE "SpotMarketInfo" AS (
-    spot_market VARCHAR(44),
+    spot_market varchar(44),
     maint_asset_weight NUMERIC, -- all I80F48
     init_asset_weight NUMERIC,
     maint_liab_weight NUMERIC,
@@ -88,7 +131,7 @@ CREATE TYPE "SpotMarketInfo" AS (
 );
 
 CREATE TYPE "PerpMarketInfo" AS (
-    perp_market VARCHAR(44),
+    perp_market varchar(44),
     maint_asset_weight NUMERIC, -- all I80F48
     init_asset_weight NUMERIC,
     maint_liab_weight NUMERIC,
@@ -101,7 +144,7 @@ CREATE TYPE "PerpMarketInfo" AS (
 );
 
 CREATE TABLE mango_group_write (
-    pubkey VARCHAR(44) NOT NULL,
+    pubkey_id BIGINT NOT NULL REFERENCES pubkey,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     version INT2,
@@ -111,19 +154,19 @@ CREATE TABLE mango_group_write (
     tokens "TokenInfo"[],
     spot_markets "SpotMarketInfo"[],
     perp_markets "PerpMarketInfo"[],
-    oracles VARCHAR(44)[],
+    oracle_ids BIGINT[],
     signer_nonce NUMERIC, -- u64
-    signer_key VARCHAR(44),
-    "admin" VARCHAR(44),
-    dex_program_id VARCHAR(44),
-    mango_cache VARCHAR(44),
+    signer_key_id BIGINT REFERENCES pubkey,
+    admin_id BIGINT REFERENCES pubkey,
+    dex_program_id BIGINT REFERENCES pubkey,
+    mango_cache_id BIGINT REFERENCES pubkey,
     valid_interval NUMERIC, -- u64
-    insurance_vault VARCHAR(44),
-    srm_vault VARCHAR(44),
-    msrm_vault VARCHAR(44),
-    fees_vault VARCHAR(44),
+    insurance_vault_id BIGINT REFERENCES pubkey,
+    srm_vault_id BIGINT REFERENCES pubkey,
+    msrm_vault_id BIGINT REFERENCES pubkey,
+    fees_vault_id BIGINT REFERENCES pubkey,
     padding BYTEA,
-    PRIMARY KEY (pubkey, slot, write_version)
+    PRIMARY KEY (pubkey_id, slot, write_version)
 );
 
 CREATE TYPE "PriceCache" AS (
@@ -144,7 +187,7 @@ CREATE TYPE "PerpMarketCache" AS (
 );
 
 CREATE TABLE mango_cache_write (
-    pubkey VARCHAR(44) NOT NULL,
+    pubkey_id BIGINT NOT NULL REFERENCES pubkey,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     version INT2,
@@ -153,5 +196,5 @@ CREATE TABLE mango_cache_write (
     price_cache "PriceCache"[],
     root_bank_cache "RootBankCache"[],
     perp_market_cache "PerpMarketCache"[],
-    PRIMARY KEY (pubkey, slot, write_version)
+    PRIMARY KEY (pubkey_id, slot, write_version)
 );

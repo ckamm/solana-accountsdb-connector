@@ -133,10 +133,12 @@ impl AccountTable for RawAccountTable {
         // TODO: should update for same write_version to work with websocket input
         let query = postgres_query::query!(
             "INSERT INTO account_write
-            (pubkey, slot, write_version, owner, lamports, executable, rent_epoch, data)
+            (pubkey_id, slot, write_version,
+             owner_id, lamports, executable, rent_epoch, data)
             VALUES
-            ($pubkey, $slot, $write_version, $owner, $lamports, $executable, $rent_epoch, $data)
-            ON CONFLICT (pubkey, slot, write_version) DO NOTHING",
+            (map_pubkey($pubkey), $slot, $write_version,
+             map_pubkey($owner), $lamports, $executable, $rent_epoch, $data)
+            ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
             slot = account_write.slot,
             write_version = account_write.write_version,
