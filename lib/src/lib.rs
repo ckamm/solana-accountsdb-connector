@@ -58,6 +58,7 @@ pub struct SlotUpdate {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub postgres_connection_string: String,
+    pub postgres_account_write_connections: i32,
     pub grpc_connection_string: String,
     pub rpc_http_url: String,
     pub rpc_ws_url: String,

@@ -3,7 +3,7 @@ use log::*;
 use postgres_query::{query, query_dyn};
 use std::{collections::HashMap, time::Duration};
 
-use crate::{AccountTables, AccountWrite, SlotUpdate};
+use crate::{AccountTables, AccountWrite, Config, SlotUpdate};
 
 async fn postgres_connection(
     connection_string: &str,
@@ -216,7 +216,7 @@ impl SlotsProcessing {
 }
 
 pub async fn init(
-    connection_string: &str,
+    config: &Config,
     account_tables: AccountTables,
 ) -> Result<
     (
@@ -232,12 +232,12 @@ pub async fn init(
     // slot updates are not parallel because their order matters
     let (slot_queue_sender, slot_queue_receiver) = async_channel::unbounded::<SlotUpdate>();
 
-    let postgres_slots = postgres_connection(connection_string).await?;
+    let postgres_slots = postgres_connection(&config.postgres_connection_string).await?;
 
     // postgres account write sending worker threads
-    // TODO: thread count config
-    for _ in 0..4 {
-        let postgres_account_writes = postgres_connection(connection_string).await?;
+    for _ in 0..config.postgres_account_write_connections {
+        let postgres_account_writes =
+            postgres_connection(&config.postgres_connection_string).await?;
         let account_write_queue_receiver_c = account_write_queue_receiver.clone();
         let account_tables_c = account_tables.clone();
         tokio::spawn(async move {

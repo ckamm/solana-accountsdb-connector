@@ -32,7 +32,7 @@ async fn main() -> Result<(), anyhow::Error> {
     ];
 
     let (account_write_queue_sender, slot_queue_sender) =
-        postgres_target::init(&config.postgres_connection_string, account_tables).await?;
+        postgres_target::init(&config, account_tables).await?;
 
     info!("postgres done");
     let use_accountsdb = true;
