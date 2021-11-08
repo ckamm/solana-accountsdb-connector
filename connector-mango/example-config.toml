@@ -1,0 +1,12 @@
+grpc_connection_string = "http://[::1]:10000"
+rpc_http_url = ""
+rpc_ws_url = ""
+program_id = "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68"
+
+[postgres_target]
+connection_string =  "host=/var/run/postgresql"
+account_write_connection_count = 4
+retry_query_max_count = 3
+retry_query_sleep_secs = 5
+retry_connection_sleep_secs = 30
+fatal_connection_timeout_secs = 600

@@ -4330,11 +4330,11 @@ dependencies = [
  "mango-common",
  "postgres-types",
  "postgres_query",
- "serde_json",
  "solana-accountsdb-connector-lib",
  "solana-logger",
  "tokio",
  "tokio-postgres",
+ "toml",
 ]
 
 [[package]]
@@ -4367,10 +4367,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "log 0.4.14",
- "serde_json",
  "solana-accountsdb-connector-lib",
  "solana-logger",
  "tokio",
+ "toml",
 ]
 
 [[package]]

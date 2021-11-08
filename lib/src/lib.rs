@@ -56,9 +56,23 @@ pub struct SlotUpdate {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct PostgresConfig {
+    pub connection_string: String,
+    /// Number of parallel postgres connections used for account write insertions
+    pub account_write_connection_count: u64,
+    /// Number of queries retries before fatal error
+    pub retry_query_max_count: u64,
+    /// Seconds to sleep between query retries
+    pub retry_query_sleep_secs: u64,
+    /// Seconds to sleep between connection attempts
+    pub retry_connection_sleep_secs: u64,
+    /// Fatal error when the connection can't be reestablished this long
+    pub fatal_connection_timeout_secs: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
-    pub postgres_connection_string: String,
-    pub postgres_account_write_connections: i32,
+    pub postgres_target: PostgresConfig,
     pub grpc_connection_string: String,
     pub rpc_http_url: String,
     pub rpc_ws_url: String,

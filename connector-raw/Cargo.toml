@@ -10,4 +10,4 @@ solana-logger = "=1.8.2"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
-serde_json = "1.0.68"
+toml = "0.5"

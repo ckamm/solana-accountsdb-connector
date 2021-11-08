@@ -18,7 +18,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut file = File::open(&args[1])?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        serde_json::from_str(&contents).unwrap()
+        toml::from_str(&contents).unwrap()
     };
 
     solana_logger::setup_with_default("info");
@@ -32,7 +32,7 @@ async fn main() -> Result<(), anyhow::Error> {
     ];
 
     let (account_write_queue_sender, slot_queue_sender) =
-        postgres_target::init(&config, account_tables).await?;
+        postgres_target::init(&config.postgres_target, account_tables).await?;
 
     info!("postgres done");
     let use_accountsdb = true;
