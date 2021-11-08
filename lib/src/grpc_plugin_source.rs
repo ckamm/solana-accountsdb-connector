@@ -18,7 +18,10 @@ pub mod accountsdb_proto {
 }
 use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
-use crate::{AccountWrite, AnyhowWrap, Config, SlotStatus, SlotUpdate};
+use crate::{
+    AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
+    SnapshotSourceConfig,
+};
 
 type SnapshotData = Response<Vec<RpcKeyedAccount>>;
 
@@ -71,14 +74,14 @@ async fn get_snapshot(
 }
 
 async fn feed_data_accountsdb(
-    config: &Config,
+    grpc_config: &GrpcSourceConfig,
+    snapshot_config: &SnapshotSourceConfig,
     sender: async_channel::Sender<Message>,
 ) -> Result<(), anyhow::Error> {
-    let program_id = Pubkey::from_str(&config.snapshot_source.program_id)?;
+    let program_id = Pubkey::from_str(&snapshot_config.program_id)?;
 
     let mut client =
-        AccountsDbClient::connect(Endpoint::from_str(&config.grpc_source.connection_string)?)
-            .await?;
+        AccountsDbClient::connect(Endpoint::from_str(&grpc_config.connection_string)?).await?;
 
     let mut update_stream = client
         .subscribe(accountsdb_proto::SubscribeRequest {})
@@ -113,7 +116,7 @@ async fn feed_data_accountsdb(
                                 if trigger_snapshot_slot_counter > 1 {
                                     trigger_snapshot_slot_counter -= 1;
                                 } else if trigger_snapshot_slot_counter == 1 {
-                                    snapshot_future = tokio::spawn(get_snapshot(config.snapshot_source.rpc_http_url.clone(), program_id, slot_update.slot - trigger_snapshot_after_slots + 1)).fuse();
+                                    snapshot_future = tokio::spawn(get_snapshot(snapshot_config.rpc_http_url.clone(), program_id, slot_update.slot - trigger_snapshot_after_slots + 1)).fuse();
                                     trigger_snapshot_slot_counter = 0;
                                 }
                             }
@@ -145,24 +148,28 @@ pub async fn process_events(
 ) {
     // Subscribe to accountsdb
     let (msg_sender, msg_receiver) = async_channel::unbounded::<Message>();
-    tokio::spawn(async move {
-        // Continuously reconnect on failure
-        loop {
-            let out = feed_data_accountsdb(&config, msg_sender.clone());
-            let result = out.await;
-            assert!(result.is_err());
-            if let Err(err) = result {
-                warn!(
-                    "error during communication with the accountsdb plugin. retrying. {:?}",
-                    err
-                );
+    for grpc_source in config.grpc_sources {
+        let msg_sender = msg_sender.clone();
+        let snapshot_source = config.snapshot_source.clone();
+        tokio::spawn(async move {
+            // Continuously reconnect on failure
+            loop {
+                let out = feed_data_accountsdb(&grpc_source, &snapshot_source, msg_sender.clone());
+                let result = out.await;
+                assert!(result.is_err());
+                if let Err(err) = result {
+                    warn!(
+                        "error during communication with the accountsdb plugin. retrying. {:?}",
+                        err
+                    );
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(
+                    grpc_source.retry_connection_sleep_secs,
+                ))
+                .await;
             }
-            tokio::time::sleep(std::time::Duration::from_secs(
-                config.grpc_source.retry_connection_sleep_secs,
-            ))
-            .await;
-        }
-    });
+        });
+    }
 
     let mut latest_write = HashMap::<Vec<u8>, (u64, u64)>::new();
 

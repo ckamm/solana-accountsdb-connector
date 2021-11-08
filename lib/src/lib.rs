@@ -93,7 +93,7 @@ pub struct SnapshotSourceConfig {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub postgres_target: PostgresConfig,
-    pub grpc_source: GrpcSourceConfig,
+    pub grpc_sources: Vec<GrpcSourceConfig>,
     pub snapshot_source: SnapshotSourceConfig,
     pub rpc_ws_url: String,
 }

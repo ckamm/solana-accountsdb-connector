@@ -1,6 +1,6 @@
 rpc_ws_url = ""
 
-[grpc_source]
+[[grpc_sources]]
 connection_string = "http://[::1]:10000"
 retry_connection_sleep_secs = 30
 

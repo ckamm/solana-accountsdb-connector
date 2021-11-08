@@ -49,10 +49,10 @@ Solana    --------------->   Connector   ----------->   PostgreSQL
 ```
 
 For reliability it is recommended to feed data from multiple Solana nodes into
-the Connector service. (That's not yet fully supported)
+the Connector service.
 
 It is also allowed to run multiple Connector services that target the same
-PostgeSQL target database. (That's not yet fully supported)
+PostgeSQL target database. (but has not been tested)
 
 The Connector service is stateless (except for some caches). Restarting it is
 always safe.
