@@ -71,12 +71,23 @@ pub struct PostgresConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct GrpcSourceConfig {
+    pub connection_string: String,
+    pub retry_connection_sleep_secs: u64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct SnapshotSourceConfig {
+    pub rpc_http_url: String,
+    pub program_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub postgres_target: PostgresConfig,
-    pub grpc_connection_string: String,
-    pub rpc_http_url: String,
+    pub grpc_source: GrpcSourceConfig,
+    pub snapshot_source: SnapshotSourceConfig,
     pub rpc_ws_url: String,
-    pub program_id: String,
 }
 
 #[async_trait]

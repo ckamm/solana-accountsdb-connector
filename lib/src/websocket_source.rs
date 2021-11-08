@@ -30,22 +30,22 @@ async fn feed_data(
     config: &Config,
     sender: async_channel::Sender<WebsocketMessage>,
 ) -> Result<(), anyhow::Error> {
-    let program_id = Pubkey::from_str(&config.program_id)?;
+    let program_id = Pubkey::from_str(&config.snapshot_source.program_id)?;
     let snapshot_duration = Duration::from_secs(300);
 
     let connect = ws::try_connect::<RpcSolPubSubClient>(&config.rpc_ws_url).map_err_anyhow()?;
     let client = connect.await.map_err_anyhow()?;
 
-    let rpc_client = http::connect_with_options::<FullClient>(&config.rpc_http_url, true)
-        .await
-        .map_err_anyhow()?;
+    let rpc_client =
+        http::connect_with_options::<FullClient>(&config.snapshot_source.rpc_http_url, true)
+            .await
+            .map_err_anyhow()?;
 
     let account_info_config = RpcAccountInfoConfig {
         encoding: Some(UiAccountEncoding::Base64),
         commitment: Some(CommitmentConfig::processed()),
         data_slice: None,
     };
-    // TODO: Make addresses filters configurable
     let program_accounts_config = RpcProgramAccountsConfig {
         filters: None,
         with_context: Some(true),

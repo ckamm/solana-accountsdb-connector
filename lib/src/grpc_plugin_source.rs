@@ -74,10 +74,11 @@ async fn feed_data_accountsdb(
     config: &Config,
     sender: async_channel::Sender<Message>,
 ) -> Result<(), anyhow::Error> {
-    let program_id = Pubkey::from_str(&config.program_id)?;
+    let program_id = Pubkey::from_str(&config.snapshot_source.program_id)?;
 
     let mut client =
-        AccountsDbClient::connect(Endpoint::from_str(&config.grpc_connection_string)?).await?;
+        AccountsDbClient::connect(Endpoint::from_str(&config.grpc_source.connection_string)?)
+            .await?;
 
     let mut update_stream = client
         .subscribe(accountsdb_proto::SubscribeRequest {})
@@ -93,6 +94,9 @@ async fn feed_data_accountsdb(
     let mut trigger_snapshot_on_slot = true;
     let mut snapshot_future = future::Fuse::terminated();
 
+    // The plugin sends a ping every 5s or so
+    let fatal_idle_timeout = Duration::from_secs(60);
+
     loop {
         tokio::select! {
             update = update_stream.next() => {
@@ -102,7 +106,7 @@ async fn feed_data_accountsdb(
                         let update = update?;
                         if let UpdateOneof::SlotUpdate(slot_update) = update.update_oneof.as_ref().expect("invalid grpc") {
                             if trigger_snapshot_on_slot && slot_update.status == Status::Processed as i32 {
-                                snapshot_future = tokio::spawn(get_snapshot(config.rpc_http_url.clone(), program_id, slot_update.slot)).fuse();
+                                snapshot_future = tokio::spawn(get_snapshot(config.snapshot_source.rpc_http_url.clone(), program_id, slot_update.slot)).fuse();
                                 trigger_snapshot_on_slot = false;
                             }
                         }
@@ -119,7 +123,7 @@ async fn feed_data_accountsdb(
                 .await
                 .expect("send success");
             },
-            _ = tokio::time::sleep(Duration::from_secs(60)) => {
+            _ = tokio::time::sleep(fatal_idle_timeout) => {
                 anyhow::bail!("accountsdb plugin hasn't sent a message in too long");
             }
         }
@@ -145,7 +149,10 @@ pub async fn process_events(
                     err
                 );
             }
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(
+                config.grpc_source.retry_connection_sleep_secs,
+            ))
+            .await;
         }
     });
 

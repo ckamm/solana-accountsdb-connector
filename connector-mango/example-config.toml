@@ -1,6 +1,11 @@
-grpc_connection_string = "http://[::1]:10000"
-rpc_http_url = ""
 rpc_ws_url = ""
+
+[grpc_source]
+connection_string = "http://[::1]:10000"
+retry_connection_sleep_secs = 30
+
+[snapshot_source]
+rpc_http_url = ""
 program_id = "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68"
 
 [postgres_target]
