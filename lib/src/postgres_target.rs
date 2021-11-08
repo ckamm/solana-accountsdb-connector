@@ -3,16 +3,20 @@ use log::*;
 use postgres_query::{query, query_dyn};
 use std::{collections::HashMap, time::Duration};
 
-use crate::{AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};
+use crate::{metrics, AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};
 
 async fn postgres_connection(
     config: &PostgresConfig,
+    metric_retries: metrics::MetricCounter,
+    metric_live: metrics::MetricCounter,
 ) -> Result<async_channel::Receiver<Option<tokio_postgres::Client>>, anyhow::Error> {
     let (tx, rx) = async_channel::unbounded();
 
     let config = config.clone();
     let mut initial =
         Some(tokio_postgres::connect(&config.connection_string, tokio_postgres::NoTls).await?);
+    let mut metric_retries = metric_retries;
+    let mut metric_live = metric_live;
     tokio::spawn(async move {
         loop {
             let (client, connection) = match initial.take() {
@@ -36,7 +40,13 @@ async fn postgres_connection(
             };
 
             tx.send(Some(client)).await.expect("send success");
+            metric_live.increment();
+
             let result = connection.await;
+
+            metric_retries.increment();
+            metric_live.decrement();
+
             tx.send(None).await.expect("send success");
             warn!("postgres connection error: {:?}", result);
             tokio::time::sleep(Duration::from_secs(config.retry_connection_sleep_secs)).await;
@@ -79,12 +89,13 @@ async fn process_account_write(
     Ok(())
 }
 
-#[derive(Default)]
 struct SlotsProcessing {
     slots: HashMap<i64, SlotUpdate>,
     newest_nonfinal_slot: Option<i64>,
     newest_final_slot: Option<i64>,
     cleanup_table_sql: Vec<String>,
+    metric_update_rooted: metrics::MetricRateCounter,
+    metric_update_uncles: metrics::MetricRateCounter,
 }
 
 impl SlotsProcessing {
@@ -149,6 +160,7 @@ impl SlotsProcessing {
         }
 
         if update.status == SlotStatus::Rooted {
+            self.metric_update_rooted.increment();
             self.slots.remove(&update.slot);
 
             // TODO: should also convert all parents to rooted, just in case we missed an update?
@@ -186,6 +198,7 @@ impl SlotsProcessing {
             let new_newest_slot = self.newest_nonfinal_slot.unwrap_or(-1) < update.slot;
 
             if new_newest_slot || parent_update {
+                self.metric_update_uncles.increment();
                 // update the uncle column for the chain of slots from the
                 // newest down the the first rooted slot
                 let query = query!(
@@ -215,7 +228,7 @@ impl SlotsProcessing {
             }
         }
 
-        info!("slot update done {}", update.slot);
+        trace!("slot update done {}", update.slot);
         Ok(())
     }
 }
@@ -223,6 +236,7 @@ impl SlotsProcessing {
 pub async fn init(
     config: &PostgresConfig,
     account_tables: AccountTables,
+    metrics_sender: metrics::Metrics,
 ) -> Result<
     (
         async_channel::Sender<AccountWrite>,
@@ -237,11 +251,17 @@ pub async fn init(
     // slot updates are not parallel because their order matters
     let (slot_queue_sender, slot_queue_receiver) = async_channel::unbounded::<SlotUpdate>();
 
-    let postgres_slots = postgres_connection(&config).await?;
+    let metric_con_retries = metrics_sender.register_counter("postgres_connection_retries".into());
+    let metric_con_live = metrics_sender.register_counter("postgres_connections_alive".into());
+
+    let postgres_slots =
+        postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone()).await?;
 
     // postgres account write sending worker threads
     for _ in 0..config.account_write_connection_count {
-        let postgres_account_writes = postgres_connection(&config).await?;
+        let postgres_account_writes =
+            postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone())
+                .await?;
         let account_write_queue_receiver_c = account_write_queue_receiver.clone();
         let account_tables_c = account_tables.clone();
         let config = config.clone();
@@ -253,7 +273,7 @@ pub async fn init(
                     .recv()
                     .await
                     .expect("sender must stay alive");
-                info!(
+                trace!(
                     "account write, channel size {}",
                     account_write_queue_receiver_c.len()
                 );
@@ -289,8 +309,19 @@ pub async fn init(
         .collect();
     let config = config.clone();
     tokio::spawn(async move {
-        let mut slots_processing = SlotsProcessing::default();
+        let mut slots_processing = SlotsProcessing {
+            slots: HashMap::<i64, SlotUpdate>::new(),
+            newest_nonfinal_slot: None,
+            newest_final_slot: None,
+            cleanup_table_sql: Vec::<String>::new(),
+            metric_update_rooted: metrics_sender
+                .register_rate_counter("postgres_slot_update_rooted".into()),
+            metric_update_uncles: metrics_sender
+                .register_rate_counter("postgres_slot_update_uncles".into()),
+        };
         let mut client_opt = None;
+        let mut metric_retries =
+            metrics_sender.register_rate_counter("postgres_slot_update_retries".into());
 
         slots_processing.set_cleanup_tables(&table_names);
 
@@ -299,7 +330,7 @@ pub async fn init(
                 .recv()
                 .await
                 .expect("sender must stay alive");
-            info!(
+            trace!(
                 "slot update {}, channel size {}",
                 update.slot,
                 slot_queue_receiver.len()
@@ -313,6 +344,7 @@ pub async fn init(
                     error_count += 1;
                     if error_count - 1 < config.retry_query_max_count {
                         warn!("failed to process slot update, retrying: {:?}", err);
+                        metric_retries.increment();
                         tokio::time::sleep(Duration::from_secs(config.retry_query_sleep_secs))
                             .await;
                         continue;

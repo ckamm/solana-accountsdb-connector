@@ -31,14 +31,21 @@ async fn main() -> Result<(), anyhow::Error> {
         Arc::new(mango::MangoCacheTable {}),
     ];
 
+    let metrics_tx = metrics::start();
+
     let (account_write_queue_sender, slot_queue_sender) =
-        postgres_target::init(&config.postgres_target, account_tables).await?;
+        postgres_target::init(&config.postgres_target, account_tables, metrics_tx.clone()).await?;
 
     info!("postgres done");
     let use_accountsdb = true;
     if use_accountsdb {
-        grpc_plugin_source::process_events(config, account_write_queue_sender, slot_queue_sender)
-            .await;
+        grpc_plugin_source::process_events(
+            config,
+            account_write_queue_sender,
+            slot_queue_sender,
+            metrics_tx,
+        )
+        .await;
     } else {
         websocket_source::process_events(config, account_write_queue_sender, slot_queue_sender)
             .await;

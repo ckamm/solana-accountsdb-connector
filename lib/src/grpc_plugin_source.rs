@@ -19,7 +19,7 @@ pub mod accountsdb_proto {
 use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
 use crate::{
-    AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
+    metrics, AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
     SnapshotSourceConfig,
 };
 
@@ -145,15 +145,25 @@ pub async fn process_events(
     config: Config,
     account_write_queue_sender: async_channel::Sender<AccountWrite>,
     slot_queue_sender: async_channel::Sender<SlotUpdate>,
+    metrics_sender: metrics::Metrics,
 ) {
     // Subscribe to accountsdb
     let (msg_sender, msg_receiver) = async_channel::unbounded::<Message>();
     for grpc_source in config.grpc_sources {
         let msg_sender = msg_sender.clone();
         let snapshot_source = config.snapshot_source.clone();
+        let metrics_sender = metrics_sender.clone();
         tokio::spawn(async move {
+            let mut metric_retries = metrics_sender.register_counter(format!(
+                "grpc_source_{}_connection_retries",
+                grpc_source.name
+            ));
+            let metric_status =
+                metrics_sender.register_tag(format!("grpc_source_{}_status", grpc_source.name));
+
             // Continuously reconnect on failure
             loop {
+                metric_status.set("connected".into());
                 let out = feed_data_accountsdb(&grpc_source, &snapshot_source, msg_sender.clone());
                 let result = out.await;
                 assert!(result.is_err());
@@ -163,6 +173,10 @@ pub async fn process_events(
                         err
                     );
                 }
+
+                metric_status.set("disconnected".into());
+                metric_retries.increment();
+
                 tokio::time::sleep(std::time::Duration::from_secs(
                     grpc_source.retry_connection_sleep_secs,
                 ))
@@ -172,6 +186,15 @@ pub async fn process_events(
     }
 
     let mut latest_write = HashMap::<Vec<u8>, (u64, u64)>::new();
+    let mut metric_account_writes =
+        metrics_sender.register_rate_counter("grpc_account_writes".into());
+    let mut metric_account_queue =
+        metrics_sender.register_rate_counter("account_write_queue".into());
+    let mut metric_slot_queue = metrics_sender.register_rate_counter("slot_update_queue".into());
+    let mut metric_slot_updates = metrics_sender.register_rate_counter("grpc_slot_updates".into());
+    let mut metric_snapshots = metrics_sender.register_rate_counter("grpc_snapshots".into());
+    let mut metric_snapshot_account_writes =
+        metrics_sender.register_rate_counter("grpc_snapshot_account_writes".into());
 
     loop {
         let msg = msg_receiver.recv().await.expect("sender must not close");
@@ -182,6 +205,9 @@ pub async fn process_events(
                     accountsdb_proto::update::UpdateOneof::AccountWrite(update) => {
                         assert!(update.pubkey.len() == 32);
                         assert!(update.owner.len() == 32);
+
+                        metric_account_writes.increment();
+                        metric_account_queue.set(account_write_queue_sender.len() as u64);
 
                         // Each validator produces writes in strictly monotonous order.
                         // This early-out allows skipping postgres queries for the node
@@ -211,6 +237,9 @@ pub async fn process_events(
                             .expect("send success");
                     }
                     accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
+                        metric_slot_updates.increment();
+                        metric_slot_queue.set(slot_queue_sender.len() as u64);
+
                         use accountsdb_proto::slot_update::Status;
                         let status = Status::from_i32(update.status).map(|v| match v {
                             Status::Processed => SlotStatus::Processed,
@@ -234,8 +263,12 @@ pub async fn process_events(
                 }
             }
             Message::Snapshot(update) => {
+                metric_snapshots.increment();
                 info!("processing snapshot...");
                 for keyed_account in update.value {
+                    metric_snapshot_account_writes.increment();
+                    metric_account_queue.set(account_write_queue_sender.len() as u64);
+
                     // TODO: Resnapshot on invalid data?
                     let account: Account = keyed_account.account.decode().unwrap();
                     let pubkey = Pubkey::from_str(&keyed_account.pubkey).unwrap();

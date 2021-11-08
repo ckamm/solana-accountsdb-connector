@@ -1,4 +1,5 @@
 pub mod grpc_plugin_source;
+pub mod metrics;
 pub mod postgres_target;
 pub mod websocket_source;
 
@@ -80,6 +81,7 @@ pub struct PostgresConfig {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct GrpcSourceConfig {
+    pub name: String,
     pub connection_string: String,
     pub retry_connection_sleep_secs: u64,
 }
