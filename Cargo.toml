@@ -1,7 +1,9 @@
 [workspace]
 members = [
         "accountsdb-plugin-grpc",
-        "connector-lib",
+        "lib",
+        "connector-raw",
+        "connector-mango",
 ]
 
 

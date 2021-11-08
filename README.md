@@ -6,6 +6,8 @@ event queues.
 
 Supported Solana sources:
 - AccountsDB plugin (preferred) plus JSONRPC HTTP API (for initial snapshots)
+
+Unfinished Solana sources:
 - JSONRPC websocket subscriptions plus JSONRPC HTTP API (for initial snapshots)
 
 Supported targets:
@@ -20,12 +22,22 @@ Components
   The Solana AccountsDB plugin. It opens a gRPC server (see `proto/`) and
   broadcasts account and slot updates to all clients that connect.
 
-- `connector-lib/`
+- `lib/`
 
   The connector abstractions that the connector service is built from.
 
-  Projects may want to build their own connector service to decode account data
-  before sending it into target systems.
+  Projects may want to use it to build their own connector service and decode
+  their specific account data before sending it into target systems.
+
+- `connector-raw/`
+
+  A connector binary built on lib/ that stores raw binary account data in
+  PostgreSQL.
+
+- `connector-mango/`
+
+  A connector binary built on lib/ that decodes Mango account types before
+  storing them in PostgeSQL.
 
 
 Design and Reliability

@@ -1,0 +1,13 @@
+[package]
+name = "solana-accountsdb-connector-raw"
+version = "0.1.0"
+authors = ["Christian Kamm <ckamm@delightful-solutions.de>"]
+edition = "2018"
+
+[dependencies]
+solana-accountsdb-connector-lib = { path = "../lib" }
+solana-logger = "=1.8.2"
+log = "0.4"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1.0"
+serde_json = "1.0.68"

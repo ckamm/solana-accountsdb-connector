@@ -4292,20 +4292,12 @@ dependencies = [
  "async-stream 0.2.1",
  "async-trait",
  "bs58 0.3.1",
- "bytes 1.1.0",
- "fixed",
  "futures 0.3.17",
  "futures-core",
  "futures-util",
- "hyper 0.14.14",
- "hyper-tls",
  "jsonrpc-core 18.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "jsonrpc-core-client",
- "jsonrpc-derive",
- "jsonrpc-http-server",
  "log 0.4.14",
- "mango",
- "mango-common",
  "postgres-types",
  "postgres_query",
  "prost 0.9.0",
@@ -4315,7 +4307,6 @@ dependencies = [
  "serde_json",
  "solana-account-decoder",
  "solana-client",
- "solana-logger",
  "solana-rpc",
  "solana-sdk",
  "tokio",
@@ -4323,6 +4314,27 @@ dependencies = [
  "tokio-stream",
  "tonic 0.6.1",
  "tonic-build 0.6.0",
+]
+
+[[package]]
+name = "solana-accountsdb-connector-mango"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bs58 0.3.1",
+ "bytes 1.1.0",
+ "fixed",
+ "log 0.4.14",
+ "mango",
+ "mango-common",
+ "postgres-types",
+ "postgres_query",
+ "serde_json",
+ "solana-accountsdb-connector-lib",
+ "solana-logger",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
@@ -4347,6 +4359,18 @@ dependencies = [
  "tokio-stream",
  "tonic 0.6.1",
  "tonic-build 0.6.0",
+]
+
+[[package]]
+name = "solana-accountsdb-connector-raw"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log 0.4.14",
+ "serde_json",
+ "solana-accountsdb-connector-lib",
+ "solana-logger",
+ "tokio",
 ]
 
 [[package]]
