@@ -11,7 +11,7 @@ use futures::{future, future::FutureExt};
 use tonic::transport::Endpoint;
 
 use log::*;
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 
 pub mod accountsdb_proto {
     tonic::include_proto!("accountsdb");
@@ -164,6 +164,8 @@ pub async fn process_events(
         }
     });
 
+    let mut latest_write = HashMap::<Vec<u8>, (u64, u64)>::new();
+
     loop {
         let msg = msg_receiver.recv().await.expect("sender must not close");
 
@@ -173,6 +175,20 @@ pub async fn process_events(
                     accountsdb_proto::update::UpdateOneof::AccountWrite(update) => {
                         assert!(update.pubkey.len() == 32);
                         assert!(update.owner.len() == 32);
+
+                        // Each validator produces writes in strictly monotonous order.
+                        // This early-out allows skipping postgres queries for the node
+                        // that is behind.
+                        if let Some((slot, write_version)) = latest_write.get(&update.pubkey) {
+                            if *slot > update.slot
+                                || (*slot == update.slot && *write_version > update.write_version)
+                            {
+                                continue;
+                            }
+                        }
+                        latest_write
+                            .insert(update.pubkey.clone(), (update.slot, update.write_version));
+
                         account_write_queue_sender
                             .send(AccountWrite {
                                 pubkey: Pubkey::new(&update.pubkey),
