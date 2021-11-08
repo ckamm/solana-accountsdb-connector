@@ -4,6 +4,7 @@ pub mod websocket_source;
 
 use {
     async_trait::async_trait,
+    postgres_types::ToSql,
     serde_derive::Deserialize,
     solana_sdk::{account::Account, pubkey::Pubkey},
     std::sync::Arc,
@@ -48,11 +49,18 @@ impl AccountWrite {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug, PartialEq, ToSql)]
+pub enum SlotStatus {
+    Rooted,
+    Confirmed,
+    Processed,
+}
+
+#[derive(Clone, Debug)]
 pub struct SlotUpdate {
     pub slot: i64,
     pub parent: Option<i64>,
-    pub status: String,
+    pub status: SlotStatus,
 }
 
 #[derive(Clone, Debug, Deserialize)]

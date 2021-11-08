@@ -17,7 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{AccountWrite, AnyhowWrap, Config, SlotUpdate};
+use crate::{AccountWrite, AnyhowWrap, Config, SlotStatus, SlotUpdate};
 
 enum WebsocketMessage {
     SingleUpdate(Response<RpcKeyedAccount>),
@@ -167,7 +167,7 @@ pub async fn process_events(
                     } => Some(SlotUpdate {
                         slot: slot as i64, // TODO: narrowing
                         parent: Some(parent as i64),
-                        status: "processed".into(),
+                        status: SlotStatus::Processed,
                     }),
                     solana_client::rpc_response::SlotUpdate::OptimisticConfirmation {
                         slot,
@@ -175,13 +175,13 @@ pub async fn process_events(
                     } => Some(SlotUpdate {
                         slot: slot as i64, // TODO: narrowing
                         parent: None,
-                        status: "confirmed".into(),
+                        status: SlotStatus::Confirmed,
                     }),
                     solana_client::rpc_response::SlotUpdate::Root { slot, .. } => {
                         Some(SlotUpdate {
                             slot: slot as i64, // TODO: narrowing
                             parent: None,
-                            status: "rooted".into(),
+                            status: SlotStatus::Rooted,
                         })
                     }
                     _ => None,

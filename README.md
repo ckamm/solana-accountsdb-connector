@@ -75,22 +75,22 @@ See `scripts/` for SQL that creates the target schema.
 
 The Connector streams data into the `account_write` and `slot` tables. When
 slots become "rooted", older `account_write` data rooted slots is deleted. That
-way the current account data for the latest rooted, committed or processed slot
+way the current account data for the latest rooted, confirmed or processed slot
 can be queried, but older data is forgotten.
 
 When new slots arrive, the `uncle` column is updated for "processed" and
-"committed" slots to allow easy filtering of slots that are no longer part of
+"confirmed" slots to allow easy filtering of slots that are no longer part of
 the chain.
 
-Example for querying committed data:
+Example for querying confirmed data:
 ```
 SELECT DISTINCT ON(pubkey) *
 FROM account_write
 INNER JOIN slot USING(slot)
-WHERE status = "rooted" OR (uncle = FALSE AND status = "committed")
+WHERE status = 'Rooted' OR (uncle = FALSE AND status = 'Confirmed')
 ORDER BY pubkey, slot DESC, write_version DESC;
 ```
 
 For each pubkey, this gets the latest (most recent slot, most recent
 write_version) account data; limited to slots that are either rooted or
-(committed and not an uncle).
+(confirmed and not an uncle).

@@ -2,6 +2,12 @@
  * This plugin implementation for PostgreSQL requires the following tables
  */
 
+CREATE TYPE "SlotStatus" AS ENUM (
+    'Rooted',
+    'Confirmed',
+    'Processed'
+);
+
 -- The table storing account writes, keeping only the newest write_version per slot
 CREATE TABLE account_write (
     pubkey VARCHAR(44) NOT NULL,
@@ -19,9 +25,10 @@ CREATE TABLE account_write (
 CREATE TABLE slot (
     slot BIGINT PRIMARY KEY,
     parent BIGINT,
-    status VARCHAR(16) NOT NULL,
+    status "SlotStatus" NOT NULL,
     uncle BOOL NOT NULL
 );
+CREATE INDEX ON slot (parent);
 
 CREATE TYPE "PerpAccount" AS (
     base_position INT8,

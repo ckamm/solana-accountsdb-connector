@@ -3,7 +3,7 @@ use log::*;
 use postgres_query::{query, query_dyn};
 use std::{collections::HashMap, time::Duration};
 
-use crate::{AccountTables, AccountWrite, PostgresConfig, SlotUpdate};
+use crate::{AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};
 
 async fn postgres_connection(
     config: &PostgresConfig,
@@ -98,7 +98,7 @@ impl SlotsProcessing {
                         SELECT DISTINCT ON(pubkey) pubkey, slot, write_version
                         FROM {table}
                         INNER JOIN slot USING(slot)
-                        WHERE slot <= $newest_final_slot AND status = 'rooted'
+                        WHERE slot <= $newest_final_slot AND status = 'Rooted'
                         ORDER BY pubkey, slot DESC, write_version DESC
                         ) latest_write
                     WHERE data.pubkey = latest_write.pubkey
@@ -148,7 +148,7 @@ impl SlotsProcessing {
             let _ = query.execute(client).await.context("updating slot row")?;
         }
 
-        if update.status == "rooted" {
+        if update.status == SlotStatus::Rooted {
             self.slots.remove(&update.slot);
 
             // TODO: should also convert all parents to rooted, just in case we missed an update?
@@ -196,7 +196,7 @@ impl SlotsProcessing {
                             UNION ALL
                             SELECT s.*, depth + 1 FROM slot s
                                 INNER JOIN liveslots l ON s.slot = l.parent
-                                WHERE l.status != 'rooted' AND depth < 1000
+                                WHERE l.status != 'Rooted' AND depth < 1000
                         ),
                         min_slot AS (SELECT min(slot) AS min_slot FROM liveslots)
                     UPDATE slot SET

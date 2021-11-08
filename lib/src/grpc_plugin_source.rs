@@ -18,7 +18,7 @@ pub mod accountsdb_proto {
 }
 use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
-use crate::{AccountWrite, AnyhowWrap, Config, SlotUpdate};
+use crate::{AccountWrite, AnyhowWrap, Config, SlotStatus, SlotUpdate};
 
 type SnapshotData = Response<Vec<RpcKeyedAccount>>;
 
@@ -181,13 +181,12 @@ pub async fn process_events(
                     }
                     accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
                         use accountsdb_proto::slot_update::Status;
-                        let status_string = match Status::from_i32(update.status) {
-                            Some(Status::Processed) => "processed",
-                            Some(Status::Confirmed) => "confirmed",
-                            Some(Status::Rooted) => "rooted",
-                            None => "",
-                        };
-                        if status_string == "" {
+                        let status = Status::from_i32(update.status).map(|v| match v {
+                            Status::Processed => SlotStatus::Processed,
+                            Status::Confirmed => SlotStatus::Confirmed,
+                            Status::Rooted => SlotStatus::Rooted,
+                        });
+                        if status.is_none() {
                             error!("unexpected slot status: {}", update.status);
                             continue;
                         }
@@ -195,7 +194,7 @@ pub async fn process_events(
                             .send(SlotUpdate {
                                 slot: update.slot as i64, // TODO: narrowing
                                 parent: update.parent.map(|v| v as i64),
-                                status: status_string.into(),
+                                status: status.expect("qed"),
                             })
                             .await
                             .expect("send success");

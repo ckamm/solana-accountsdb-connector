@@ -4,3 +4,4 @@
 
 DROP TABLE slot CASCADE;
 DROP TABLE account_write CASCADE;
+DROP TYPE "SlotStatus";

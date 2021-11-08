@@ -5,15 +5,15 @@ CREATE VIEW account_rooted AS
         *
         FROM account_write
         INNER JOIN slot USING(slot)
-        WHERE slot.status = 'rooted'
+        WHERE slot.status = 'Rooted'
         ORDER BY pubkey, slot DESC, write_version DESC;
-CREATE VIEW account_committed AS
+CREATE VIEW account_confirmed AS
     SELECT
         DISTINCT ON(pubkey)
         *
         FROM account_write
         INNER JOIN slot USING(slot)
-        WHERE (slot.status = 'committed' AND NOT slot.uncle) OR slot.status = 'rooted'
+        WHERE (slot.status = 'Confirmed' AND NOT slot.uncle) OR slot.status = 'Rooted'
         ORDER BY pubkey, slot DESC, write_version DESC;
 CREATE VIEW account_processed AS
     SELECT
@@ -21,7 +21,7 @@ CREATE VIEW account_processed AS
         *
         FROM account_write
         INNER JOIN slot USING(slot)
-        WHERE ((slot.status = 'committed' OR slot.status = 'processed') AND NOT slot.uncle) OR slot.status = 'rooted'
+        WHERE ((slot.status = 'Confirmed' OR slot.status = 'Processed') AND NOT slot.uncle) OR slot.status = 'Rooted'
         ORDER BY pubkey, slot DESC, write_version DESC;
 
 CREATE VIEW mango_account_rooted AS
@@ -30,15 +30,15 @@ CREATE VIEW mango_account_rooted AS
         *
         FROM mango_account_write
         INNER JOIN slot USING(slot)
-        WHERE slot.status = 'rooted'
+        WHERE slot.status = 'Rooted'
         ORDER BY pubkey, slot DESC, write_version DESC;
-CREATE VIEW mango_account_committed AS
+CREATE VIEW mango_account_confirmed AS
     SELECT
         DISTINCT ON(pubkey)
         *
         FROM mango_account_write
         INNER JOIN slot USING(slot)
-        WHERE (slot.status = 'committed' AND NOT slot.uncle) OR slot.status = 'rooted'
+        WHERE (slot.status = 'Confirmed' AND NOT slot.uncle) OR slot.status = 'Rooted'
         ORDER BY pubkey, slot DESC, write_version DESC;
 CREATE VIEW mango_account_processed AS
     SELECT
@@ -46,7 +46,7 @@ CREATE VIEW mango_account_processed AS
         *
         FROM mango_account_write
         INNER JOIN slot USING(slot)
-        WHERE ((slot.status = 'committed' OR slot.status = 'processed') AND NOT slot.uncle) OR slot.status = 'rooted'
+        WHERE ((slot.status = 'Confirmed' OR slot.status = 'Processed') AND NOT slot.uncle) OR slot.status = 'Rooted'
         ORDER BY pubkey, slot DESC, write_version DESC;
 
 CREATE VIEW mango_account_processed_balance AS
