@@ -111,6 +111,9 @@ impl SlotsProcessing {
                 )
             })
             .collect();
+
+        self.cleanup_table_sql
+            .push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
     }
 
     async fn process(
@@ -149,12 +152,13 @@ impl SlotsProcessing {
             self.slots.remove(&update.slot);
 
             // TODO: should also convert all parents to rooted, just in case we missed an update?
-            // TODO: Or, instead, wipe some old slots, to avoid accumulating them needlessly?
 
             // Keep only the most recent final write per pubkey
             if self.newest_final_slot.unwrap_or(-1) < update.slot {
+                // Keep only the newest rooted account write and also
+                // wipe old slots
                 for cleanup_sql in &self.cleanup_table_sql {
-                    let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot,)?;
+                    let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot)?;
                     let _ = query
                         .execute(client)
                         .await
