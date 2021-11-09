@@ -17,27 +17,77 @@ Supported targets:
 Components
 ==========
 
-- `accountsdb-plugin-grpc/`
+- [`accountsdb-plugin-grpc/`](accountsdb-plugin-grpc/)
 
-  The Solana AccountsDB plugin. It opens a gRPC server (see `proto/`) and
+  The Solana AccountsDB plugin. It opens a gRPC server (see [`proto/`](proto/)) and
   broadcasts account and slot updates to all clients that connect.
 
-- `lib/`
+- [`lib/`](lib/)
 
   The connector abstractions that the connector service is built from.
 
   Projects may want to use it to build their own connector service and decode
   their specific account data before sending it into target systems.
 
-- `connector-raw/`
+- [`connector-raw/`](connector-raw/)
 
   A connector binary built on lib/ that stores raw binary account data in
   PostgreSQL.
 
-- `connector-mango/`
+- [`connector-mango/`](connector-mango/)
 
   A connector binary built on lib/ that decodes Mango account types before
   storing them in PostgeSQL.
+
+
+Setup Tutorial
+==============
+
+1. Compile the project.
+
+   Make sure that you are using _exactly_ the same Rust version for compiling the
+   AccountsDb plugin that was used for compiling your `solana-validator`! Otherwise
+   the plugin will crash the validator during startup!
+
+2. Prepare the plugin configuration file.
+
+   [Here is an example](accountsdb-plugin-grpc/example-config.json). This file
+   points the validator to your plugin shared library, controls which accounts
+   will be exported, which address the gRPC server will bind to and internal
+   queue sizes.
+
+3. Run `solana-validator` with `--accountsdb-plugin-config myconfig.json`.
+
+   Check the logs to ensure the plugin was loaded.
+
+4. Prepare the connector configuration file.
+
+   [Here is an example](connector-raw/example-config.toml).
+
+   - `rpc_ws_url` is unused and can stay empty.
+   - `connection_string` for your `grpc_sources` must point to the gRPC server
+     address configured for the plugin.
+   - `rpc_http_url` must point to the JSON-RPC URL.
+   - `connection_string` for your `posgres_target` uses [the tokio-postgres syntax](https://docs.rs/tokio-postgres/0.7.5/tokio_postgres/config/struct.Config.html)
+   - `program_id` must match what is configured for the gRPC plugin
+
+5. Prepare the PostgreSQL schema.
+
+   Use [this example script](connector-raw/scripts/create_schema.sql).
+
+6. Start the connector service binary.
+
+   Pass the path to the config file as the first argument. It logs to stdout.
+   It should be restarted on exit. (it intentionally terminates when postgres is
+   unreachable for too long, for example)
+
+7. Monitor the logs
+
+   `WARN` messages can be recovered from. `ERROR` messages need attention.
+
+   Check the metrics for `account_write_queue` and `slot_update_queue`: They should
+   be around 0. If they keep growing the service can't keep up and you'll need
+   to figure out what's up.
 
 
 Design and Reliability
