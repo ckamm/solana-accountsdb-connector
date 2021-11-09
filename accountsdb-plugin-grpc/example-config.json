@@ -1,0 +1,11 @@
+{
+        "libpath": "/path/to/libsolana_accountsdb_connector_plugin_grpc.so",
+        "accounts_selector" : {
+                "owners" : ["mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68"]
+        },
+        "bind_address": "[::1]:10000",
+        "service_config": {
+                "broadcast_buffer_size": 10000,
+                "subscriber_buffer_size": 10000
+        }
+}
