@@ -29,7 +29,7 @@ enum WebsocketMessage {
 async fn feed_data(
     config: &Config,
     sender: async_channel::Sender<WebsocketMessage>,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     let program_id = Pubkey::from_str(&config.snapshot_source.program_id)?;
     let snapshot_duration = Duration::from_secs(300);
 

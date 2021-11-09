@@ -9,7 +9,7 @@ async fn postgres_connection(
     config: &PostgresConfig,
     metric_retries: metrics::MetricU64,
     metric_live: metrics::MetricU64,
-) -> Result<async_channel::Receiver<Option<tokio_postgres::Client>>, anyhow::Error> {
+) -> anyhow::Result<async_channel::Receiver<Option<tokio_postgres::Client>>> {
     let (tx, rx) = async_channel::unbounded();
 
     let config = config.clone();
@@ -80,7 +80,7 @@ async fn process_account_write(
     client: &postgres_query::Caching<tokio_postgres::Client>,
     write: &AccountWrite,
     account_tables: &AccountTables,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     for account_table in account_tables {
         // TODO: Could run all these in parallel instead of sequentially
         let _ = account_table.insert_account_write(client, write).await?;
@@ -131,7 +131,7 @@ impl SlotsProcessing {
         &mut self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         update: &SlotUpdate,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if let Some(parent) = update.parent {
             let query = query!(
                 "INSERT INTO slot
@@ -237,13 +237,10 @@ pub async fn init(
     config: &PostgresConfig,
     account_tables: AccountTables,
     metrics_sender: metrics::Metrics,
-) -> Result<
-    (
-        async_channel::Sender<AccountWrite>,
-        async_channel::Sender<SlotUpdate>,
-    ),
-    anyhow::Error,
-> {
+) -> anyhow::Result<(
+    async_channel::Sender<AccountWrite>,
+    async_channel::Sender<SlotUpdate>,
+)> {
     // The actual message may want to also contain a retry count, if it self-reinserts on failure?
     let (account_write_queue_sender, account_write_queue_receiver) =
         async_channel::unbounded::<AccountWrite>();

@@ -251,7 +251,7 @@ impl AccountTable for MangoAccountTable {
         &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         account_write: &AccountWrite,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if account_write.data.len() != mem::size_of::<MangoAccount>()
             || account_write.data[0] != DataType::MangoAccount as u8
         {
@@ -417,7 +417,7 @@ impl AccountTable for MangoGroupTable {
         &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         account_write: &AccountWrite,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if account_write.data.len() != mem::size_of::<MangoGroup>()
             || account_write.data[0] != DataType::MangoGroup as u8
         {
@@ -571,7 +571,7 @@ impl AccountTable for MangoCacheTable {
         &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         account_write: &AccountWrite,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         if account_write.data.len() != mem::size_of::<MangoCache>()
             || account_write.data[0] != DataType::MangoCache as u8
         {

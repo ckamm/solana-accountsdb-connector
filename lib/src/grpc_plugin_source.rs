@@ -34,7 +34,7 @@ async fn get_snapshot(
     rpc_http_url: String,
     program_id: Pubkey,
     min_slot: u64,
-) -> Result<SnapshotData, anyhow::Error> {
+) -> anyhow::Result<SnapshotData> {
     let rpc_client = http::connect_with_options::<FullClient>(&rpc_http_url, true)
         .await
         .map_err_anyhow()?;
@@ -77,7 +77,7 @@ async fn feed_data_accountsdb(
     grpc_config: &GrpcSourceConfig,
     snapshot_config: &SnapshotSourceConfig,
     sender: async_channel::Sender<Message>,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     let program_id = Pubkey::from_str(&snapshot_config.program_id)?;
 
     let mut client =

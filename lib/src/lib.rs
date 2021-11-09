@@ -107,7 +107,7 @@ pub trait AccountTable: Sync + Send {
         &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         account_write: &AccountWrite,
-    ) -> Result<(), anyhow::Error>;
+    ) -> anyhow::Result<()>;
 }
 
 pub type AccountTables = Vec<Arc<dyn AccountTable>>;
@@ -128,7 +128,7 @@ impl AccountTable for RawAccountTable {
         &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         account_write: &AccountWrite,
-    ) -> Result<(), anyhow::Error> {
+    ) -> anyhow::Result<()> {
         let pubkey = encode_address(&account_write.pubkey);
         let owner = encode_address(&account_write.owner);
 
