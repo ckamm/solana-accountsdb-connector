@@ -154,12 +154,12 @@ pub async fn process_events(
         let snapshot_source = config.snapshot_source.clone();
         let metrics_sender = metrics_sender.clone();
         tokio::spawn(async move {
-            let mut metric_retries = metrics_sender.register_counter(format!(
+            let mut metric_retries = metrics_sender.register_u64(format!(
                 "grpc_source_{}_connection_retries",
                 grpc_source.name
             ));
             let metric_status =
-                metrics_sender.register_tag(format!("grpc_source_{}_status", grpc_source.name));
+                metrics_sender.register_string(format!("grpc_source_{}_status", grpc_source.name));
 
             // Continuously reconnect on failure
             loop {
@@ -186,15 +186,13 @@ pub async fn process_events(
     }
 
     let mut latest_write = HashMap::<Vec<u8>, (u64, u64)>::new();
-    let mut metric_account_writes =
-        metrics_sender.register_rate_counter("grpc_account_writes".into());
-    let mut metric_account_queue =
-        metrics_sender.register_rate_counter("account_write_queue".into());
-    let mut metric_slot_queue = metrics_sender.register_rate_counter("slot_update_queue".into());
-    let mut metric_slot_updates = metrics_sender.register_rate_counter("grpc_slot_updates".into());
-    let mut metric_snapshots = metrics_sender.register_rate_counter("grpc_snapshots".into());
+    let mut metric_account_writes = metrics_sender.register_u64("grpc_account_writes".into());
+    let mut metric_account_queue = metrics_sender.register_u64("account_write_queue".into());
+    let mut metric_slot_queue = metrics_sender.register_u64("slot_update_queue".into());
+    let mut metric_slot_updates = metrics_sender.register_u64("grpc_slot_updates".into());
+    let mut metric_snapshots = metrics_sender.register_u64("grpc_snapshots".into());
     let mut metric_snapshot_account_writes =
-        metrics_sender.register_rate_counter("grpc_snapshot_account_writes".into());
+        metrics_sender.register_u64("grpc_snapshot_account_writes".into());
 
     loop {
         let msg = msg_receiver.recv().await.expect("sender must not close");

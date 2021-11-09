@@ -7,8 +7,8 @@ use crate::{metrics, AccountTables, AccountWrite, PostgresConfig, SlotStatus, Sl
 
 async fn postgres_connection(
     config: &PostgresConfig,
-    metric_retries: metrics::MetricCounter,
-    metric_live: metrics::MetricCounter,
+    metric_retries: metrics::MetricU64,
+    metric_live: metrics::MetricU64,
 ) -> Result<async_channel::Receiver<Option<tokio_postgres::Client>>, anyhow::Error> {
     let (tx, rx) = async_channel::unbounded();
 
@@ -94,8 +94,8 @@ struct SlotsProcessing {
     newest_nonfinal_slot: Option<i64>,
     newest_final_slot: Option<i64>,
     cleanup_table_sql: Vec<String>,
-    metric_update_rooted: metrics::MetricRateCounter,
-    metric_update_uncles: metrics::MetricRateCounter,
+    metric_update_rooted: metrics::MetricU64,
+    metric_update_uncles: metrics::MetricU64,
 }
 
 impl SlotsProcessing {
@@ -251,8 +251,8 @@ pub async fn init(
     // slot updates are not parallel because their order matters
     let (slot_queue_sender, slot_queue_receiver) = async_channel::unbounded::<SlotUpdate>();
 
-    let metric_con_retries = metrics_sender.register_counter("postgres_connection_retries".into());
-    let metric_con_live = metrics_sender.register_counter("postgres_connections_alive".into());
+    let metric_con_retries = metrics_sender.register_u64("postgres_connection_retries".into());
+    let metric_con_live = metrics_sender.register_u64("postgres_connections_alive".into());
 
     let postgres_slots =
         postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone()).await?;
@@ -314,14 +314,11 @@ pub async fn init(
             newest_nonfinal_slot: None,
             newest_final_slot: None,
             cleanup_table_sql: Vec::<String>::new(),
-            metric_update_rooted: metrics_sender
-                .register_rate_counter("postgres_slot_update_rooted".into()),
-            metric_update_uncles: metrics_sender
-                .register_rate_counter("postgres_slot_update_uncles".into()),
+            metric_update_rooted: metrics_sender.register_u64("postgres_slot_update_rooted".into()),
+            metric_update_uncles: metrics_sender.register_u64("postgres_slot_update_uncles".into()),
         };
         let mut client_opt = None;
-        let mut metric_retries =
-            metrics_sender.register_rate_counter("postgres_slot_update_retries".into());
+        let mut metric_retries = metrics_sender.register_u64("postgres_slot_update_retries".into());
 
         slots_processing.set_cleanup_tables(&table_names);
 
