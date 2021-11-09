@@ -4,6 +4,16 @@ Overview
 This project is about streaming Solana account updates for a specific program
 into other databases or event queues.
 
+Having an up to date version of all account data data in a database is
+particularly useful for queries that need access to all accounts. For example,
+retrieving the addresses of Mango Markets accounts with the largest unrealized
+PnL goes from "getProgramAccounts from a Solana node for 50MB of data and compute
+locally (3-10s total)" to "run a SQL query (150ms total)".
+
+The database could also be used as a backend for serving `getMultipleAccounts`
+and `getProgramAccounts` queries generally. That would reduce load on Solana RPCt
+nodes while decreasing response times.
+
 Supported Solana sources:
 - AccountsDB plugin (preferred) plus JSONRPC HTTP API (for initial snapshots)
 
