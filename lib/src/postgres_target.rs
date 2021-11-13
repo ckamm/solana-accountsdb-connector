@@ -1,5 +1,7 @@
 use anyhow::Context;
 use log::*;
+use native_tls::TlsConnector;
+use postgres_native_tls::MakeTlsConnector;
 use postgres_query::{query, query_dyn};
 use std::{collections::HashMap, time::Duration};
 
@@ -12,9 +14,10 @@ async fn postgres_connection(
 ) -> anyhow::Result<async_channel::Receiver<Option<tokio_postgres::Client>>> {
     let (tx, rx) = async_channel::unbounded();
 
+    let tls = MakeTlsConnector::new(TlsConnector::new()?);
+
     let config = config.clone();
-    let mut initial =
-        Some(tokio_postgres::connect(&config.connection_string, tokio_postgres::NoTls).await?);
+    let mut initial = Some(tokio_postgres::connect(&config.connection_string, tls.clone()).await?);
     let mut metric_retries = metric_retries;
     let mut metric_live = metric_live;
     tokio::spawn(async move {
@@ -23,8 +26,7 @@ async fn postgres_connection(
                 Some(v) => v,
                 None => {
                     let result =
-                        tokio_postgres::connect(&config.connection_string, tokio_postgres::NoTls)
-                            .await;
+                        tokio_postgres::connect(&config.connection_string, tls.clone()).await;
                     match result {
                         Ok(v) => v,
                         Err(err) => {
