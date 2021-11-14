@@ -16,3 +16,4 @@ retry_query_max_count = 3
 retry_query_sleep_secs = 5
 retry_connection_sleep_secs = 30
 fatal_connection_timeout_secs = 600
+allow_invalid_certs = false

@@ -14,7 +14,11 @@ async fn postgres_connection(
 ) -> anyhow::Result<async_channel::Receiver<Option<tokio_postgres::Client>>> {
     let (tx, rx) = async_channel::unbounded();
 
-    let tls = MakeTlsConnector::new(TlsConnector::new()?);
+    let tls = MakeTlsConnector::new(
+        TlsConnector::builder()
+            .danger_accept_invalid_certs(config.allow_invalid_certs)
+            .build()?,
+    );
 
     let config = config.clone();
     let mut initial = Some(tokio_postgres::connect(&config.connection_string, tls.clone()).await?);

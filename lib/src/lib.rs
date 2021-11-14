@@ -78,6 +78,8 @@ pub struct PostgresConfig {
     pub retry_connection_sleep_secs: u64,
     /// Fatal error when the connection can't be reestablished this long
     pub fatal_connection_timeout_secs: u64,
+    /// Allow invalid TLS certificates, passed to native_tls danger_accept_invalid_certs
+    pub allow_invalid_certs: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
