@@ -64,7 +64,7 @@ impl AccountTable for MangoAccountTable {
         let spot_open_orders = data
             .spot_open_orders
             .iter()
-            .map(|key| encode_address(&key))
+            .map(|key| encode_address(key))
             .collect::<Vec<String>>();
         let perp_accounts = data
             .perp_accounts
@@ -254,7 +254,7 @@ impl AccountTable for MangoGroupTable {
         let oracles = data
             .oracles
             .iter()
-            .map(|key| encode_address(&key))
+            .map(|key| encode_address(key))
             .collect::<Vec<String>>();
         let signer_nonce = SqlNumericU64(data.signer_nonce);
         let signer_key = encode_address(&data.signer_key);

@@ -62,12 +62,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             if sender.receiver_count() > 0 {
                 println!("sending...");
-                slot = slot + 1;
+                slot += 1;
                 let parent = slot - rand::thread_rng().gen_range(1..=2);
                 sender
                     .send(Update {
                         update_oneof: Some(UpdateOneof::SlotUpdate(SlotUpdate {
-                            slot: slot,
+                            slot,
                             parent: Some(parent),
                             status: rand::thread_rng().gen_range(0..=2),
                         })),

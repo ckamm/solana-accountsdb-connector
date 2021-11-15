@@ -71,7 +71,7 @@ async fn update_postgres_client<'a>(
     while !rx.is_empty() || client.is_none() {
         tokio::select! {
             client_raw_opt = rx.recv() => {
-                *client = client_raw_opt.expect("not closed").map(|client| postgres_query::Caching::new(client));
+                *client = client_raw_opt.expect("not closed").map(postgres_query::Caching::new);
             },
             _ = tokio::time::sleep(Duration::from_secs(config.fatal_connection_timeout_secs)) => {
                 error!("waited too long for new postgres client");
@@ -298,7 +298,7 @@ pub async fn init(
     // postgres account write sending worker threads
     for _ in 0..config.account_write_connection_count {
         let postgres_account_writes =
-            postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone())
+            postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
                 .await?;
         let account_write_queue_receiver_c = account_write_queue_receiver.clone();
         let account_tables_c = account_tables.clone();
@@ -378,7 +378,7 @@ pub async fn init(
     let slots_processing = SlotsProcessing::new(&table_names);
     for _ in 0..config.slot_update_connection_count {
         let postgres_slot =
-            postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone())
+            postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
                 .await?;
         let receiver_c = slot_inserter_receiver.clone();
         let config = config.clone();

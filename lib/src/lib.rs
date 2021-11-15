@@ -46,7 +46,7 @@ impl AccountWrite {
             owner: account.owner,
             executable: account.executable,
             rent_epoch: account.rent_epoch as i64, // TODO: narrowing!
-            data: account.data.clone(),
+            data: account.data,
         }
     }
 }
