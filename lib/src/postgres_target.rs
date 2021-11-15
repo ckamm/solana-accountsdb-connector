@@ -95,18 +95,83 @@ async fn process_account_write(
     Ok(())
 }
 
-struct SlotsProcessing {
+struct Slots {
+    // non-rooted only
     slots: HashMap<i64, SlotUpdate>,
-    newest_nonfinal_slot: Option<i64>,
-    newest_final_slot: Option<i64>,
+    newest_processed_slot: Option<i64>,
+    newest_rooted_slot: Option<i64>,
+}
+
+#[derive(Default)]
+struct SlotPreprocessing {
+    discard_duplicate: bool,
+    discard_old: bool,
+    new_processed_head: bool,
+    new_rooted_head: bool,
+    parent_update: bool,
+}
+
+impl Slots {
+    fn new() -> Self {
+        Self {
+            slots: HashMap::new(),
+            newest_processed_slot: None,
+            newest_rooted_slot: None,
+        }
+    }
+
+    fn add(&mut self, update: &SlotUpdate) -> SlotPreprocessing {
+        let mut result = SlotPreprocessing::default();
+
+        if let Some(previous) = self.slots.get_mut(&update.slot) {
+            if previous.status == update.status && previous.parent == update.parent {
+                result.discard_duplicate = true;
+            }
+
+            previous.status = update.status;
+            if update.parent.is_some() && previous.parent != update.parent {
+                previous.parent = update.parent;
+                result.parent_update = true;
+            }
+        } else if update.slot > self.newest_rooted_slot.unwrap_or(-1) {
+            self.slots.insert(update.slot, update.clone());
+        } else {
+            result.discard_old = true;
+        }
+
+        if update.status == SlotStatus::Rooted {
+            let old_slots: Vec<i64> = self
+                .slots
+                .keys()
+                .filter(|s| **s <= update.slot)
+                .copied()
+                .collect();
+            for old_slot in old_slots {
+                self.slots.remove(&old_slot);
+            }
+            if self.newest_rooted_slot.unwrap_or(-1) < update.slot {
+                self.newest_rooted_slot = Some(update.slot);
+                result.new_rooted_head = true;
+            }
+        }
+
+        if self.newest_processed_slot.unwrap_or(-1) < update.slot {
+            self.newest_processed_slot = Some(update.slot);
+            result.new_processed_head = true;
+        }
+
+        result
+    }
+}
+
+#[derive(Clone)]
+struct SlotsProcessing {
     cleanup_table_sql: Vec<String>,
-    metric_update_rooted: metrics::MetricU64,
-    metric_update_uncles: metrics::MetricU64,
 }
 
 impl SlotsProcessing {
-    fn set_cleanup_tables(&mut self, tables: &Vec<String>) {
-        self.cleanup_table_sql = tables
+    fn new(tables: &Vec<String>) -> Self {
+        let mut cleanup_table_sql: Vec<String> = tables
             .iter()
             .map(|table_name| {
                 format!(
@@ -129,14 +194,16 @@ impl SlotsProcessing {
             })
             .collect();
 
-        self.cleanup_table_sql
-            .push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
+        cleanup_table_sql.push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
+
+        Self { cleanup_table_sql }
     }
 
     async fn process(
-        &mut self,
+        &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         update: &SlotUpdate,
+        meta: &SlotPreprocessing,
     ) -> anyhow::Result<()> {
         if let Some(parent) = update.parent {
             let query = query!(
@@ -165,73 +232,41 @@ impl SlotsProcessing {
             let _ = query.execute(client).await.context("updating slot row")?;
         }
 
-        if update.status == SlotStatus::Rooted {
-            self.metric_update_rooted.increment();
-            self.slots.remove(&update.slot);
-
-            // TODO: should also convert all parents to rooted, just in case we missed an update?
-
-            // Keep only the most recent final write per pubkey
-            if self.newest_final_slot.unwrap_or(-1) < update.slot {
-                // Keep only the newest rooted account write and also
-                // wipe old slots
-                for cleanup_sql in &self.cleanup_table_sql {
-                    let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot)?;
-                    let _ = query
-                        .execute(client)
-                        .await
-                        .context("deleting old account writes")?;
-                }
-
-                self.newest_final_slot = Some(update.slot);
-            }
-
-            if self.newest_nonfinal_slot.unwrap_or(-1) == update.slot {
-                self.newest_nonfinal_slot = None;
-            }
-        } else {
-            let mut parent_update = false;
-            if let Some(previous) = self.slots.get_mut(&update.slot) {
-                previous.status = update.status.clone();
-                if update.parent.is_some() {
-                    previous.parent = update.parent;
-                    parent_update = true;
-                }
-            } else {
-                self.slots.insert(update.slot, update.clone());
-            }
-
-            let new_newest_slot = self.newest_nonfinal_slot.unwrap_or(-1) < update.slot;
-
-            if new_newest_slot || parent_update {
-                self.metric_update_uncles.increment();
-                // update the uncle column for the chain of slots from the
-                // newest down the the first rooted slot
-                let query = query!(
-                    "WITH RECURSIVE
-                        liveslots AS (
-                            SELECT slot.*, 0 AS depth FROM slot
-                                WHERE slot = (SELECT max(slot) FROM slot)
-                            UNION ALL
-                            SELECT s.*, depth + 1 FROM slot s
-                                INNER JOIN liveslots l ON s.slot = l.parent
-                                WHERE l.status != 'Rooted' AND depth < 1000
-                        ),
-                        min_slot AS (SELECT min(slot) AS min_slot FROM liveslots)
-                    UPDATE slot SET
-                        uncle = NOT EXISTS (SELECT 1 FROM liveslots WHERE liveslots.slot = slot.slot)
-                        FROM min_slot
-                        WHERE slot >= min_slot;"
-                );
+        if meta.new_rooted_head {
+            // Keep only the newest rooted account write and also
+            // wipe old slots
+            for cleanup_sql in &self.cleanup_table_sql {
+                let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot)?;
                 let _ = query
                     .execute(client)
                     .await
-                    .context("recomputing slot uncle status")?;
+                    .context("deleting old account writes")?;
             }
+        }
 
-            if new_newest_slot {
-                self.newest_nonfinal_slot = Some(update.slot);
-            }
+        if meta.new_processed_head || meta.parent_update {
+            // update the uncle column for the chain of slots from the
+            // newest down the the first rooted slot
+            let query = query!(
+                "WITH RECURSIVE
+                    liveslots AS (
+                        SELECT slot.*, 0 AS depth FROM slot
+                            WHERE slot = (SELECT max(slot) FROM slot)
+                        UNION ALL
+                        SELECT s.*, depth + 1 FROM slot s
+                            INNER JOIN liveslots l ON s.slot = l.parent
+                            WHERE l.status != 'Rooted' AND depth < 1000
+                    ),
+                    min_slot AS (SELECT min(slot) AS min_slot FROM liveslots)
+                UPDATE slot SET
+                    uncle = NOT EXISTS (SELECT 1 FROM liveslots WHERE liveslots.slot = slot.slot)
+                    FROM min_slot
+                    WHERE slot >= min_slot;"
+            );
+            let _ = query
+                .execute(client)
+                .await
+                .context("recomputing slot uncle status")?;
         }
 
         trace!("slot update done {}", update.slot);
@@ -251,14 +286,14 @@ pub async fn init(
     let (account_write_queue_sender, account_write_queue_receiver) =
         async_channel::unbounded::<AccountWrite>();
 
-    // slot updates are not parallel because their order matters
+    // Slot updates flowing from the outside into the single processing thread. From
+    // there they'll flow into the postgres sending thread.
     let (slot_queue_sender, slot_queue_receiver) = async_channel::unbounded::<SlotUpdate>();
+    let (slot_inserter_sender, slot_inserter_receiver) =
+        async_channel::unbounded::<(SlotUpdate, SlotPreprocessing)>();
 
     let metric_con_retries = metrics_sender.register_u64("postgres_connection_retries".into());
     let metric_con_live = metrics_sender.register_u64("postgres_connections_alive".into());
-
-    let postgres_slots =
-        postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone()).await?;
 
     // postgres account write sending worker threads
     for _ in 0..config.account_write_connection_count {
@@ -268,10 +303,11 @@ pub async fn init(
         let account_write_queue_receiver_c = account_write_queue_receiver.clone();
         let account_tables_c = account_tables.clone();
         let config = config.clone();
+        let mut metric_retries =
+            metrics_sender.register_u64("postgres_account_write_retries".into());
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
-                // all of this needs to be in a function, to allow ?
                 let write = account_write_queue_receiver_c
                     .recv()
                     .await
@@ -288,6 +324,7 @@ pub async fn init(
                             .await;
                     if let Err(err) = process_account_write(client, &write, &account_tables_c).await
                     {
+                        metric_retries.increment();
                         error_count += 1;
                         if error_count - 1 < config.retry_query_max_count {
                             warn!("failed to process account write, retrying: {:?}", err);
@@ -306,24 +343,8 @@ pub async fn init(
     }
 
     // slot update handling thread
-    let table_names: Vec<String> = account_tables
-        .iter()
-        .map(|table| table.table_name().to_string())
-        .collect();
-    let config = config.clone();
     tokio::spawn(async move {
-        let mut slots_processing = SlotsProcessing {
-            slots: HashMap::<i64, SlotUpdate>::new(),
-            newest_nonfinal_slot: None,
-            newest_final_slot: None,
-            cleanup_table_sql: Vec::<String>::new(),
-            metric_update_rooted: metrics_sender.register_u64("postgres_slot_update_rooted".into()),
-            metric_update_uncles: metrics_sender.register_u64("postgres_slot_update_uncles".into()),
-        };
-        let mut client_opt = None;
-        let mut metric_retries = metrics_sender.register_u64("postgres_slot_update_retries".into());
-
-        slots_processing.set_cleanup_tables(&table_names);
+        let mut slots = Slots::new();
 
         loop {
             let update = slot_queue_receiver
@@ -336,27 +357,65 @@ pub async fn init(
                 slot_queue_receiver.len()
             );
 
-            let mut error_count = 0;
-            loop {
-                let client =
-                    update_postgres_client(&mut client_opt, &postgres_slots, &config).await;
-                if let Err(err) = slots_processing.process(client, &update).await {
-                    error_count += 1;
-                    if error_count - 1 < config.retry_query_max_count {
-                        warn!("failed to process slot update, retrying: {:?}", err);
-                        metric_retries.increment();
-                        tokio::time::sleep(Duration::from_secs(config.retry_query_sleep_secs))
-                            .await;
-                        continue;
-                    } else {
-                        error!("failed to process slot update, exiting");
-                        std::process::exit(1);
-                    }
-                };
-                break;
+            // Check if we already know about the slot, or it is outdated
+            let slot_preprocessing = slots.add(&update);
+            if slot_preprocessing.discard_duplicate || slot_preprocessing.discard_old {
+                continue;
             }
+
+            slot_inserter_sender
+                .send((update, slot_preprocessing))
+                .await
+                .expect("sending must succeed");
         }
     });
+
+    // postgres slot update worker threads
+    let table_names: Vec<String> = account_tables
+        .iter()
+        .map(|table| table.table_name().to_string())
+        .collect();
+    let slots_processing = SlotsProcessing::new(&table_names);
+    for _ in 0..config.slot_update_connection_count {
+        let postgres_slot =
+            postgres_connection(&config, metric_con_retries.clone(), metric_con_live.clone())
+                .await?;
+        let receiver_c = slot_inserter_receiver.clone();
+        let config = config.clone();
+        let mut metric_retries = metrics_sender.register_u64("postgres_slot_update_retries".into());
+        let slots_processing = slots_processing.clone();
+        tokio::spawn(async move {
+            let mut client_opt = None;
+            loop {
+                let (update, preprocessing) =
+                    receiver_c.recv().await.expect("sender must stay alive");
+                trace!("slot insertion, slot {}", update.slot);
+
+                let mut error_count = 0;
+                loop {
+                    let client =
+                        update_postgres_client(&mut client_opt, &postgres_slot, &config).await;
+                    if let Err(err) = slots_processing
+                        .process(client, &update, &preprocessing)
+                        .await
+                    {
+                        metric_retries.increment();
+                        error_count += 1;
+                        if error_count - 1 < config.retry_query_max_count {
+                            warn!("failed to process account write, retrying: {:?}", err);
+                            tokio::time::sleep(Duration::from_secs(config.retry_query_sleep_secs))
+                                .await;
+                            continue;
+                        } else {
+                            error!("failed to process account write, exiting");
+                            std::process::exit(1);
+                        }
+                    };
+                    break;
+                }
+            }
+        });
+    }
 
     Ok((account_write_queue_sender, slot_queue_sender))
 }

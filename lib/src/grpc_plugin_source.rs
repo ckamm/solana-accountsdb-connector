@@ -248,12 +248,14 @@ pub async fn process_events(
                             error!("unexpected slot status: {}", update.status);
                             continue;
                         }
+                        let slot_update = SlotUpdate {
+                            slot: update.slot as i64, // TODO: narrowing
+                            parent: update.parent.map(|v| v as i64),
+                            status: status.expect("qed"),
+                        };
+
                         slot_queue_sender
-                            .send(SlotUpdate {
-                                slot: update.slot as i64, // TODO: narrowing
-                                parent: update.parent.map(|v| v as i64),
-                                status: status.expect("qed"),
-                            })
+                            .send(slot_update)
                             .await
                             .expect("send success");
                     }

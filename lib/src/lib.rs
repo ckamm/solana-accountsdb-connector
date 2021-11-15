@@ -51,7 +51,7 @@ impl AccountWrite {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, ToSql)]
+#[derive(Clone, Copy, Debug, PartialEq, ToSql)]
 pub enum SlotStatus {
     Rooted,
     Confirmed,
@@ -70,6 +70,8 @@ pub struct PostgresConfig {
     pub connection_string: String,
     /// Number of parallel postgres connections used for account write insertions
     pub account_write_connection_count: u64,
+    /// Number of parallel postgres connections used for slot insertions
+    pub slot_update_connection_count: u64,
     /// Number of queries retries before fatal error
     pub retry_query_max_count: u64,
     /// Seconds to sleep between query retries
