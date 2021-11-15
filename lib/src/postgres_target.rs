@@ -343,6 +343,7 @@ pub async fn init(
     }
 
     // slot update handling thread
+    let mut metric_slot_queue = metrics_sender.register_u64("slot_insert_queue".into());
     tokio::spawn(async move {
         let mut slots = Slots::new();
 
@@ -367,6 +368,7 @@ pub async fn init(
                 .send((update, slot_preprocessing))
                 .await
                 .expect("sending must succeed");
+            metric_slot_queue.set(slot_inserter_sender.len() as u64);
         }
     });
 

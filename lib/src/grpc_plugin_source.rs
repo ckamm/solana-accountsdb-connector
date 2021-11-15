@@ -96,8 +96,8 @@ async fn feed_data_accountsdb(
     // all data for it.
     // We can't do it immediately for the first processed slot we get, because the
     // info about the new slot is sent before it's completed and the snapshot will be
-    // for the preceding slot then. Thus wait for two slots, before asking for a snapshot.
-    let trigger_snapshot_after_slots = 2;
+    // for the preceding slot then. Thus wait for some slots before asking for a snapshot.
+    let trigger_snapshot_after_slots = 10;
     let mut trigger_snapshot_slot_counter = trigger_snapshot_after_slots;
     let mut snapshot_future = future::Fuse::terminated();
 
