@@ -8,3 +8,11 @@ DROP VIEW mango_account_processed;
 
 DROP VIEW mango_account_processed_balance;
 DROP VIEW mango_account_processed_perp;
+
+DROP VIEW mango_group_rooted;
+DROP VIEW mango_group_confirmed;
+DROP VIEW mango_group_processed;
+
+DROP VIEW mango_cache_rooted;
+DROP VIEW mango_cache_confirmed;
+DROP VIEW mango_cache_processed;
