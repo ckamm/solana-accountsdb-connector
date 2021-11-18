@@ -85,10 +85,18 @@ pub struct PostgresConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct TlsConfig {
+    pub ca_cert_path: String,
+    pub client_cert_path: String,
+    pub client_key_path: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct GrpcSourceConfig {
     pub name: String,
     pub connection_string: String,
     pub retry_connection_sleep_secs: u64,
+    pub tls: Option<TlsConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

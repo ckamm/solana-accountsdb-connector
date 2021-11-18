@@ -5,6 +5,11 @@ name = "server"
 connection_string = "http://[::1]:10000"
 retry_connection_sleep_secs = 30
 
+#[grpc_sources.tls]
+#ca_cert_path = "ca.pem"
+#client_cert_path = "client.pem"
+#client_key_path = "client.pem"
+
 [snapshot_source]
 rpc_http_url = ""
 program_id = "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68"

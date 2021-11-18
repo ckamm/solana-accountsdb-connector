@@ -8,7 +8,7 @@ use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use futures::{future, future::FutureExt};
-use tonic::transport::Endpoint;
+use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 
 use log::*;
 use std::{collections::HashMap, str::FromStr, time::Duration};
@@ -20,7 +20,7 @@ use accountsdb_proto::accounts_db_client::AccountsDbClient;
 
 use crate::{
     metrics, AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
-    SnapshotSourceConfig,
+    SnapshotSourceConfig, TlsConfig,
 };
 
 type SnapshotData = Response<Vec<RpcKeyedAccount>>;
@@ -75,13 +75,21 @@ async fn get_snapshot(
 
 async fn feed_data_accountsdb(
     grpc_config: &GrpcSourceConfig,
+    tls_config: Option<ClientTlsConfig>,
     snapshot_config: &SnapshotSourceConfig,
     sender: async_channel::Sender<Message>,
 ) -> anyhow::Result<()> {
     let program_id = Pubkey::from_str(&snapshot_config.program_id)?;
 
-    let mut client =
-        AccountsDbClient::connect(Endpoint::from_str(&grpc_config.connection_string)?).await?;
+    let endpoint = Endpoint::from_str(&grpc_config.connection_string)?;
+    let channel = if let Some(tls) = tls_config {
+        endpoint.tls_config(tls)?
+    } else {
+        endpoint
+    }
+    .connect()
+    .await?;
+    let mut client = AccountsDbClient::new(channel);
 
     let mut update_stream = client
         .subscribe(accountsdb_proto::SubscribeRequest {})
@@ -141,6 +149,18 @@ async fn feed_data_accountsdb(
     }
 }
 
+fn make_tls_config(config: &TlsConfig) -> ClientTlsConfig {
+    let server_root_ca_cert =
+        std::fs::read(&config.ca_cert_path).expect("reading server root ca cert");
+    let server_root_ca_cert = Certificate::from_pem(server_root_ca_cert);
+    let client_cert = std::fs::read(&config.client_cert_path).expect("reading client cert");
+    let client_key = std::fs::read(&config.client_key_path).expect("reading client key");
+    let client_identity = Identity::from_pem(client_cert, client_key);
+    ClientTlsConfig::new()
+        .ca_certificate(server_root_ca_cert)
+        .identity(client_identity)
+}
+
 pub async fn process_events(
     config: Config,
     account_write_queue_sender: async_channel::Sender<AccountWrite>,
@@ -153,6 +173,10 @@ pub async fn process_events(
         let msg_sender = msg_sender.clone();
         let snapshot_source = config.snapshot_source.clone();
         let metrics_sender = metrics_sender.clone();
+
+        // Make TLS config if configured
+        let tls_config = grpc_source.tls.as_ref().map(make_tls_config);
+
         tokio::spawn(async move {
             let mut metric_retries = metrics_sender.register_u64(format!(
                 "grpc_source_{}_connection_retries",
@@ -164,7 +188,12 @@ pub async fn process_events(
             // Continuously reconnect on failure
             loop {
                 metric_status.set("connected".into());
-                let out = feed_data_accountsdb(&grpc_source, &snapshot_source, msg_sender.clone());
+                let out = feed_data_accountsdb(
+                    &grpc_source,
+                    tls_config.clone(),
+                    &snapshot_source,
+                    msg_sender.clone(),
+                );
                 let result = out.await;
                 assert!(result.is_err());
                 if let Err(err) = result {
