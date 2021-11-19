@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 solana-accountsdb-connector-lib = { path = "../lib" }
-solana-logger = "=1.8.2"
+solana-logger = "=1.8.3"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"

@@ -11,10 +11,10 @@ edition = "2018"
 jsonrpc-core = "18.0.0"
 jsonrpc-core-client = { version = "18.0.0", features = ["ws", "http"] }
 
-solana-rpc = "=1.8.2"
-solana-client = "=1.8.2"
+solana-rpc = "=1.8.3"
+solana-client = "=1.8.3"
 solana-account-decoder = "1.8.2"
-solana-sdk = "=1.8.2"
+solana-sdk = "=1.8.3"
 
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
