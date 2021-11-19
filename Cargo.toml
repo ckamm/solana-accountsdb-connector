@@ -9,7 +9,7 @@ members = [
 
 [patch.crates-io]
 # for gzip encoded responses
-jsonrpc-core-client = { path = "../jsonrpc-dep/core-client" }
+jsonrpc-core-client = { git = "https://github.com/ckamm/jsonrpc.git", branch = "ckamm/http-with-gzip" }
 
 #solana-accountsdb-plugin-interface = { path = "../solana-accountsdb/accountsdb-plugin-interface" }
 #solana-logger = { path = "../solana-accountsdb/logger" }

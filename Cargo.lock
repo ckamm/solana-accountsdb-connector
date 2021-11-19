@@ -2142,14 +2142,15 @@ dependencies = [
 [[package]]
 name = "jsonrpc-client-transports"
 version = "18.0.0"
+source = "git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip#8c7213e70a8a72e63f7a783e6b851bf28ac9aeb6"
 dependencies = [
  "derive_more",
  "flate2 0.2.20",
  "futures 0.3.17",
  "hyper 0.14.14",
- "jsonrpc-core 18.0.0",
- "jsonrpc-pubsub 18.0.0",
- "jsonrpc-server-utils 18.0.0",
+ "jsonrpc-core 18.0.0 (git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip)",
+ "jsonrpc-pubsub 18.0.0 (git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip)",
+ "jsonrpc-server-utils 18.0.0 (git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip)",
  "log 0.4.14",
  "parity-tokio-ipc",
  "serde",
@@ -2157,19 +2158,6 @@ dependencies = [
  "tokio",
  "url 1.7.2",
  "websocket",
-]
-
-[[package]]
-name = "jsonrpc-core"
-version = "18.0.0"
-dependencies = [
- "futures 0.3.17",
- "futures-executor",
- "futures-util",
- "log 0.4.14",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]
@@ -2188,8 +2176,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonrpc-core"
+version = "18.0.0"
+source = "git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip#8c7213e70a8a72e63f7a783e6b851bf28ac9aeb6"
+dependencies = [
+ "futures 0.3.17",
+ "futures-executor",
+ "futures-util",
+ "log 0.4.14",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "jsonrpc-core-client"
 version = "18.0.0"
+source = "git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip#8c7213e70a8a72e63f7a783e6b851bf28ac9aeb6"
 dependencies = [
  "futures 0.3.17",
  "jsonrpc-client-transports",
@@ -2226,19 +2229,6 @@ dependencies = [
 [[package]]
 name = "jsonrpc-pubsub"
 version = "18.0.0"
-dependencies = [
- "futures 0.3.17",
- "jsonrpc-core 18.0.0",
- "lazy_static",
- "log 0.4.14",
- "parking_lot 0.11.2",
- "rand 0.7.3",
- "serde",
-]
-
-[[package]]
-name = "jsonrpc-pubsub"
-version = "18.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "240f87695e6c6f62fb37f05c02c04953cf68d6408b8c1c89de85c7a0125b1011"
 dependencies = [
@@ -2252,19 +2242,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "jsonrpc-server-utils"
+name = "jsonrpc-pubsub"
 version = "18.0.0"
+source = "git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip#8c7213e70a8a72e63f7a783e6b851bf28ac9aeb6"
 dependencies = [
- "bytes 1.1.0",
  "futures 0.3.17",
- "globset",
- "jsonrpc-core 18.0.0",
+ "jsonrpc-core 18.0.0 (git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip)",
  "lazy_static",
  "log 0.4.14",
- "tokio",
- "tokio-stream",
- "tokio-util",
- "unicase 2.6.0",
+ "parking_lot 0.11.2",
+ "rand 0.7.3",
+ "serde",
 ]
 
 [[package]]
@@ -2277,6 +2265,23 @@ dependencies = [
  "futures 0.3.17",
  "globset",
  "jsonrpc-core 18.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static",
+ "log 0.4.14",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "unicase 2.6.0",
+]
+
+[[package]]
+name = "jsonrpc-server-utils"
+version = "18.0.0"
+source = "git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip#8c7213e70a8a72e63f7a783e6b851bf28ac9aeb6"
+dependencies = [
+ "bytes 1.1.0",
+ "futures 0.3.17",
+ "globset",
+ "jsonrpc-core 18.0.0 (git+https://github.com/ckamm/jsonrpc.git?branch=ckamm/http-with-gzip)",
  "lazy_static",
  "log 0.4.14",
  "tokio",
