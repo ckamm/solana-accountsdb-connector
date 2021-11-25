@@ -147,9 +147,9 @@ Example for querying confirmed data:
 SELECT DISTINCT ON(pubkey_id)
     pubkey, account_write.*
 FROM account_write
-INNER JOIN slot USING(slot)
+LEFT JOIN slot USING(slot)
 INNER JOIN pubkey USING(pubkey_id)
-WHERE status = 'Rooted' OR (uncle = FALSE AND status = 'Confirmed')
+WHERE status = 'Rooted' OR status IS NULL OR (uncle = FALSE AND status = 'Confirmed')
 ORDER BY pubkey_id, slot DESC, write_version DESC;
 ```
 

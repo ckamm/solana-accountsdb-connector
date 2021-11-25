@@ -171,6 +171,10 @@ struct SlotsProcessing {
 
 impl SlotsProcessing {
     fn new(tables: &Vec<String>) -> Self {
+        // Delete:
+        // 1. account writes that came before the newest rooted write
+        // 2. account writes that came after the newest rooted write but before
+        //    the newest rooted slot (like processed writes that never confirmed)
         let mut cleanup_table_sql: Vec<String> = tables
             .iter()
             .map(|table_name| {
@@ -179,14 +183,26 @@ impl SlotsProcessing {
                     USING (
                         SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
                         FROM {table}
-                        INNER JOIN slot USING(slot)
-                        WHERE slot <= $newest_final_slot AND status = 'Rooted'
+                        LEFT JOIN slot USING(slot)
+                        WHERE slot <= $newest_final_slot AND (status = 'Rooted' OR status is NULL)
                         ORDER BY pubkey_id, slot DESC, write_version DESC
                         ) latest_write
                     WHERE data.pubkey_id = latest_write.pubkey_id
-                    AND (data.slot < latest_write.slot
-                        OR (data.slot = latest_write.slot
-                            AND data.write_version < latest_write.write_version
+                    AND (
+                        (data.slot < latest_write.slot
+                            OR (data.slot = latest_write.slot
+                                AND data.write_version < latest_write.write_version
+                            )
+                        )
+                        OR
+                        (
+                            data.slot < $newest_final_slot
+                            AND
+                            (data.slot > latest_write.slot
+                                OR (data.slot = latest_write.slot
+                                    AND data.write_version > latest_write.write_version
+                                )
+                            )
                         )
                     )",
                     table = table_name
@@ -194,6 +210,7 @@ impl SlotsProcessing {
             })
             .collect();
 
+        // Delete old slots
         cleanup_table_sql.push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
 
         Self { cleanup_table_sql }
