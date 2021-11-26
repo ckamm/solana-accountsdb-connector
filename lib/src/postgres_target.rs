@@ -213,15 +213,6 @@ impl SlotsProcessing {
         // Delete old slots
         cleanup_table_sql.push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
 
-        // Mark preceeding non-uncle slots as rooted
-        cleanup_table_sql.push(
-            "UPDATE slot SET status = 'Rooted'
-            WHERE slot < $newest_final_slot
-            AND (NOT uncle)
-            AND status != 'Rooted'"
-                .into(),
-        );
-
         Self { cleanup_table_sql }
     }
 
@@ -259,6 +250,19 @@ impl SlotsProcessing {
         }
 
         if meta.new_rooted_head {
+            // Mark preceeding non-uncle slots as rooted
+            let query = query!(
+                "UPDATE slot SET status = 'Rooted'
+                WHERE slot < $newest_final_slot
+                AND (NOT uncle)
+                AND status != 'Rooted'",
+                newest_final_slot = update.slot
+            );
+            let _ = query
+                .execute(client)
+                .await
+                .context("updating preceding non-rooted slots")?;
+
             // Keep only the newest rooted account write and also
             // wipe old slots
             for cleanup_sql in &self.cleanup_table_sql {
