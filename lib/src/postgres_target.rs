@@ -213,6 +213,15 @@ impl SlotsProcessing {
         // Delete old slots
         cleanup_table_sql.push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
 
+        // Mark preceeding non-uncle slots as rooted
+        cleanup_table_sql.push(
+            "UPDATE slot SET status = 'Rooted'
+            WHERE slot < $newest_final_slot
+            AND (NOT uncle)
+            AND status != 'Rooted'"
+                .into(),
+        );
+
         Self { cleanup_table_sql }
     }
 
