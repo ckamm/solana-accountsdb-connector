@@ -89,6 +89,7 @@ pub struct TlsConfig {
     pub ca_cert_path: String,
     pub client_cert_path: String,
     pub client_key_path: String,
+    pub domain_name: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

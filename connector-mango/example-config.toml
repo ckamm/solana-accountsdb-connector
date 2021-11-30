@@ -9,6 +9,7 @@ retry_connection_sleep_secs = 30
 #ca_cert_path = "ca.pem"
 #client_cert_path = "client.pem"
 #client_key_path = "client.pem"
+#domain_name = "example.com"
 
 [snapshot_source]
 rpc_http_url = ""

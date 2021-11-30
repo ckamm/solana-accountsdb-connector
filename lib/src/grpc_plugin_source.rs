@@ -159,6 +159,7 @@ fn make_tls_config(config: &TlsConfig) -> ClientTlsConfig {
     ClientTlsConfig::new()
         .ca_certificate(server_root_ca_cert)
         .identity(client_identity)
+        .domain_name(&config.domain_name)
 }
 
 pub async fn process_events(
