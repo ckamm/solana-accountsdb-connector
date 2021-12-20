@@ -265,6 +265,7 @@ impl SlotsProcessing {
 
             // Keep only the newest rooted account write and also
             // wipe old slots
+            /*
             for cleanup_sql in &self.cleanup_table_sql {
                 let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot)?;
                 let _ = query
@@ -272,6 +273,7 @@ impl SlotsProcessing {
                     .await
                     .context("deleting old account writes")?;
             }
+            */
         }
 
         if meta.new_processed_head || meta.parent_update {
