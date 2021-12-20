@@ -434,12 +434,12 @@ pub async fn init(
                         metric_retries.increment();
                         error_count += 1;
                         if error_count - 1 < config.retry_query_max_count {
-                            warn!("failed to process account write, retrying: {:?}", err);
+                            warn!("failed to process slot update, retrying: {:?}", err);
                             tokio::time::sleep(Duration::from_secs(config.retry_query_sleep_secs))
                                 .await;
                             continue;
                         } else {
-                            error!("failed to process account write, exiting");
+                            error!("failed to process slot update, exiting");
                             std::process::exit(1);
                         }
                     };
