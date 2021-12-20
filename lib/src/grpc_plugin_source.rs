@@ -109,12 +109,22 @@ async fn feed_data_accountsdb(
     // The plugin sends a ping every 5s or so
     let fatal_idle_timeout = Duration::from_secs(60);
 
+    // Current slot that account writes come in for.
+    let mut current_write_slot: u64 = 0;
+    // Unfortunately the write_version the plugin provides is local to
+    // each RPC node. Here we fix it up by giving each pubkey a write_version
+    // based on the count of writes it gets each slot.
+    let mut slot_pubkey_writes = HashMap::<Vec<u8>, u64>::new();
+
+    // Keep track of write version from RPC node, to check assumptions
+    let mut last_write_version: u64 = 0;
+
     loop {
         tokio::select! {
             update = update_stream.next() => {
                 use accountsdb_proto::{update::UpdateOneof, slot_update::Status};
-                let update = update.ok_or(anyhow::anyhow!("accountsdb plugin has closed the stream"))??;
-                match update.update_oneof.as_ref().expect("invalid grpc") {
+                let mut update = update.ok_or(anyhow::anyhow!("accountsdb plugin has closed the stream"))??;
+                match update.update_oneof.as_mut().expect("invalid grpc") {
                     UpdateOneof::SlotUpdate(slot_update) => {
                         let status = slot_update.status;
                         if snapshot_needed && status == Status::Rooted as i32 && slot_update.slot - rooted_to_finalized_slots > lowest_write_slot {
@@ -123,9 +133,28 @@ async fn feed_data_accountsdb(
                         }
                     },
                     UpdateOneof::AccountWrite(write) => {
-                        if lowest_write_slot > write.slot {
-                            lowest_write_slot = write.slot;
+                        if write.slot > current_write_slot {
+                            current_write_slot = write.slot;
+                            slot_pubkey_writes.clear();
+                            if lowest_write_slot > write.slot {
+                                lowest_write_slot = write.slot;
+                            }
                         }
+                        if lowest_write_slot == write.slot {
+                            // don't send out account writes for the first slot
+                            // since we don't know their write_version
+                            continue;
+                        }
+
+                        // We assume we will receive write versions in sequence.
+                        // If this is not the case, logic here does not work correctly because
+                        // a later write could arrive first.
+                        assert!(write.write_version > last_write_version);
+                        last_write_version = write.write_version;
+
+                        let version = slot_pubkey_writes.entry(write.pubkey.clone()).or_insert(0);
+                        write.write_version = *version;
+                        *version += 1;
                     },
                     accountsdb_proto::update::UpdateOneof::Ping(_) => {},
                 }
