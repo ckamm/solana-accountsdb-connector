@@ -1,6 +1,8 @@
 #!/bin/bash
 
-echo "$CONFIG_FILE" > config.toml
+# Write the contents of env variable named by $1
+printf '%s\n' "${!1}" > config.toml
+
 echo "$TLS_CA" > ca.pem
 echo "$TLS_CLIENT" > client.pem
 
