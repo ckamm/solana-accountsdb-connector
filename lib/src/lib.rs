@@ -82,6 +82,8 @@ pub struct PostgresConfig {
     pub fatal_connection_timeout_secs: u64,
     /// Allow invalid TLS certificates, passed to native_tls danger_accept_invalid_certs
     pub allow_invalid_certs: bool,
+    /// Delete old data automatically, keeping only the current data snapshot
+    pub delete_old_data: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

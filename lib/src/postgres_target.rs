@@ -170,48 +170,53 @@ struct SlotsProcessing {
 }
 
 impl SlotsProcessing {
-    fn new(tables: &Vec<String>) -> Self {
-        // Delete:
-        // 1. account writes that came before the newest rooted write
-        // 2. account writes that came after the newest rooted write but before
-        //    the newest rooted slot (like processed writes that never confirmed)
-        let mut cleanup_table_sql: Vec<String> = tables
-            .iter()
-            .map(|table_name| {
-                format!(
-                    "DELETE FROM {table} AS data
-                    USING (
-                        SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
-                        FROM {table}
-                        LEFT JOIN slot USING(slot)
-                        WHERE slot <= $newest_final_slot AND (status = 'Rooted' OR status is NULL)
-                        ORDER BY pubkey_id, slot DESC, write_version DESC
-                        ) latest_write
-                    WHERE data.pubkey_id = latest_write.pubkey_id
-                    AND (
-                        (data.slot < latest_write.slot
-                            OR (data.slot = latest_write.slot
-                                AND data.write_version < latest_write.write_version
-                            )
-                        )
-                        OR
-                        (
-                            data.slot < $newest_final_slot
-                            AND
-                            (data.slot > latest_write.slot
+    fn new(tables: &Vec<String>, delete_old_data: bool) -> Self {
+        let cleanup_table_sql = Vec::<String>::new();
+
+        if delete_old_data {
+            // Delete:
+            // 1. account writes that came before the newest rooted write
+            // 2. account writes that came after the newest rooted write but before
+            //    the newest rooted slot (like processed writes that never confirmed)
+            let mut cleanup_table_sql: Vec<String> = tables
+                .iter()
+                .map(|table_name| {
+                    format!(
+                        "DELETE FROM {table} AS data
+                        USING (
+                            SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
+                            FROM {table}
+                            LEFT JOIN slot USING(slot)
+                            WHERE slot <= $newest_final_slot AND (status = 'Rooted' OR status is NULL)
+                            ORDER BY pubkey_id, slot DESC, write_version DESC
+                            ) latest_write
+                        WHERE data.pubkey_id = latest_write.pubkey_id
+                        AND (
+                            (data.slot < latest_write.slot
                                 OR (data.slot = latest_write.slot
-                                    AND data.write_version > latest_write.write_version
+                                    AND data.write_version < latest_write.write_version
                                 )
                             )
-                        )
-                    )",
-                    table = table_name
-                )
-            })
-            .collect();
+                            OR
+                            (
+                                data.slot < $newest_final_slot
+                                AND
+                                (data.slot > latest_write.slot
+                                    OR (data.slot = latest_write.slot
+                                        AND data.write_version > latest_write.write_version
+                                    )
+                                )
+                            )
+                        )",
+                        table = table_name
+                    )
+                })
+                .collect();
 
-        // Delete old slots
-        cleanup_table_sql.push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
+            // Delete old slots
+            cleanup_table_sql
+                .push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
+        }
 
         Self { cleanup_table_sql }
     }
@@ -264,7 +269,7 @@ impl SlotsProcessing {
                 .context("updating preceding non-rooted slots")?;
 
             // Keep only the newest rooted account write and also
-            // wipe old slots
+            // wipe old slots (if configured)
             for cleanup_sql in &self.cleanup_table_sql {
                 let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot)?;
                 let _ = query
@@ -407,7 +412,7 @@ pub async fn init(
         .iter()
         .map(|table| table.table_name().to_string())
         .collect();
-    let slots_processing = SlotsProcessing::new(&table_names);
+    let slots_processing = SlotsProcessing::new(&table_names, config.delete_old_data);
     for _ in 0..config.slot_update_connection_count {
         let postgres_slot =
             postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
