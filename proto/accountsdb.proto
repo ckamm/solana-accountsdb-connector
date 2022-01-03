@@ -18,6 +18,7 @@ message Update {
     AccountWrite account_write = 1;
     SlotUpdate slot_update = 2;
     Ping ping = 3;
+    SubscribeResponse subscribe_response = 4;
   }
 }
 
@@ -45,4 +46,8 @@ message SlotUpdate {
 }
 
 message Ping {
+}
+
+message SubscribeResponse {
+  uint64 highest_write_slot = 1;
 }

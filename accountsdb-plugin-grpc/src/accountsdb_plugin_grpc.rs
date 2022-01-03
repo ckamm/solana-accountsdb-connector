@@ -2,7 +2,7 @@ use {
     crate::accounts_selector::AccountsSelector,
     accountsdb_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
-        SlotUpdate, SubscribeRequest, Update,
+        SlotUpdate, SubscribeRequest, SubscribeResponse, Update,
     },
     bs58,
     log::*,
@@ -12,7 +12,8 @@ use {
         AccountsDbPlugin, AccountsDbPluginError, ReplicaAccountInfoVersions,
         Result as PluginResult, SlotStatus,
     },
-    std::{fs::File, io::Read},
+    std::sync::atomic::{AtomicU64, Ordering},
+    std::{fs::File, io::Read, sync::Arc},
     tokio::sync::{broadcast, mpsc},
     tonic::transport::Server,
 };
@@ -39,12 +40,17 @@ pub mod accountsdb_service {
     pub struct Service {
         pub sender: broadcast::Sender<Update>,
         pub config: ServiceConfig,
+        pub highest_write_slot: Arc<AtomicU64>,
     }
 
     impl Service {
-        pub fn new(config: ServiceConfig) -> Self {
+        pub fn new(config: ServiceConfig, highest_write_slot: Arc<AtomicU64>) -> Self {
             let (tx, _) = broadcast::channel(config.broadcast_buffer_size);
-            Self { sender: tx, config }
+            Self {
+                sender: tx,
+                config,
+                highest_write_slot,
+            }
         }
     }
 
@@ -59,6 +65,15 @@ pub mod accountsdb_service {
             info!("new subscriber");
             let (tx, rx) = mpsc::channel(self.config.subscriber_buffer_size);
             let mut broadcast_rx = self.sender.subscribe();
+
+            tx.send(Ok(Update {
+                update_oneof: Some(UpdateOneof::SubscribeResponse(SubscribeResponse {
+                    highest_write_slot: self.highest_write_slot.load(Ordering::SeqCst),
+                })),
+            }))
+            .await
+            .unwrap();
+
             tokio::spawn(async move {
                 let mut exit = false;
                 while !exit {
@@ -86,6 +101,9 @@ pub struct PluginData {
     server_broadcast: broadcast::Sender<Update>,
     server_exit_sender: Option<broadcast::Sender<()>>,
     accounts_selector: AccountsSelector,
+
+    /// Largest slot that an account write was processed for
+    highest_write_slot: Arc<AtomicU64>,
 }
 
 #[derive(Default)]
@@ -150,7 +168,9 @@ impl AccountsDbPlugin for Plugin {
             }
         })?;
 
-        let service = accountsdb_service::Service::new(config.service_config);
+        let highest_write_slot = Arc::new(AtomicU64::new(0));
+        let service =
+            accountsdb_service::Service::new(config.service_config, highest_write_slot.clone());
         let (server_exit_sender, mut server_exit_receiver) = broadcast::channel::<()>(1);
         let server_broadcast = service.sender.clone();
 
@@ -183,6 +203,7 @@ impl AccountsDbPlugin for Plugin {
             server_broadcast,
             server_exit_sender: Some(server_exit_sender),
             accounts_selector,
+            highest_write_slot,
         });
 
         Ok(())
@@ -219,6 +240,8 @@ impl AccountsDbPlugin for Plugin {
                 {
                     return Ok(());
                 }
+
+                data.highest_write_slot.fetch_max(slot, Ordering::SeqCst);
 
                 debug!(
                     "Updating account {:?} with owner {:?} at slot {:?}",
