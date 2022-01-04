@@ -169,7 +169,7 @@ async fn feed_data_accountsdb(
 
                         if write.slot > newest_write_slot {
                             newest_write_slot = write.slot;
-                        } else if write.slot < max_rooted_slot - max_out_of_order_slots {
+                        } else if max_rooted_slot > 0 && write.slot < max_rooted_slot - max_out_of_order_slots {
                             anyhow::bail!("received write {} slots back from max rooted slot {}", max_rooted_slot - write.slot, max_rooted_slot);
                         }
 
