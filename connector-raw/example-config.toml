@@ -18,6 +18,7 @@ program_id = ""
 [postgres_target]
 connection_string =  "host=/var/run/postgresql"
 account_write_connection_count = 4
+account_write_max_batch_size = 10
 slot_update_connection_count = 2
 retry_query_max_count = 3
 retry_query_sleep_secs = 5

@@ -87,11 +87,12 @@ async fn process_account_write(
     write: &AccountWrite,
     account_tables: &AccountTables,
 ) -> anyhow::Result<()> {
-    for account_table in account_tables {
-        // TODO: Could run all these in parallel instead of sequentially
-        let _ = account_table.insert_account_write(client, write).await?;
-    }
-
+    futures::future::try_join_all(
+        account_tables
+            .iter()
+            .map(|table| table.insert_account_write(client, write)),
+    )
+    .await?;
     Ok(())
 }
 
@@ -343,13 +344,28 @@ pub async fn init(
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
-                let write = account_write_queue_receiver_c
-                    .recv()
-                    .await
-                    .expect("sender must stay alive");
+                // Retrieve up to batch_size account writes
+                let mut write_batch = Vec::new();
+                write_batch.push(
+                    account_write_queue_receiver_c
+                        .recv()
+                        .await
+                        .expect("sender must stay alive"),
+                );
+                while write_batch.len() < config.account_write_max_batch_size {
+                    match account_write_queue_receiver_c.try_recv() {
+                        Ok(write) => write_batch.push(write),
+                        Err(async_channel::TryRecvError::Empty) => break,
+                        Err(async_channel::TryRecvError::Closed) => {
+                            panic!("sender must stay alive")
+                        }
+                    };
+                }
+
                 trace!(
-                    "account write, channel size {}",
-                    account_write_queue_receiver_c.len()
+                    "account write, batch {}, channel size {}",
+                    write_batch.len(),
+                    account_write_queue_receiver_c.len(),
                 );
 
                 let mut error_count = 0;
@@ -357,12 +373,20 @@ pub async fn init(
                     let client =
                         update_postgres_client(&mut client_opt, &postgres_account_writes, &config)
                             .await;
-                    if let Err(err) = process_account_write(client, &write, &account_tables_c).await
-                    {
-                        metric_retries.increment();
+                    let mut results = futures::future::join_all(
+                        write_batch
+                            .iter()
+                            .map(|write| process_account_write(client, &write, &account_tables_c)),
+                    )
+                    .await;
+                    let mut iter = results.iter();
+                    write_batch.retain(|_| iter.next().unwrap().is_err());
+                    if write_batch.len() > 0 {
+                        metric_retries.add(write_batch.len() as u64);
                         error_count += 1;
                         if error_count - 1 < config.retry_query_max_count {
-                            warn!("failed to process account write, retrying: {:?}", err);
+                            results.retain(|r| r.is_err());
+                            warn!("failed to process account write, retrying: {:?}", results);
                             tokio::time::sleep(Duration::from_secs(config.retry_query_sleep_secs))
                                 .await;
                             continue;

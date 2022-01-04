@@ -28,6 +28,10 @@ impl MetricU64 {
         self.value.store(value, atomic::Ordering::Release);
     }
 
+    pub fn add(&mut self, value: u64) {
+        self.value.fetch_add(value, atomic::Ordering::AcqRel);
+    }
+
     pub fn increment(&mut self) {
         self.value.fetch_add(1, atomic::Ordering::AcqRel);
     }
