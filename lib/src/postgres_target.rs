@@ -172,14 +172,14 @@ struct SlotsProcessing {
 
 impl SlotsProcessing {
     fn new(tables: &Vec<String>, delete_old_data: bool) -> Self {
-        let cleanup_table_sql = Vec::<String>::new();
+        let mut cleanup_table_sql = Vec::<String>::new();
 
         if delete_old_data {
             // Delete:
             // 1. account writes that came before the newest rooted write
             // 2. account writes that came after the newest rooted write but before
             //    the newest rooted slot (like processed writes that never confirmed)
-            let mut cleanup_table_sql: Vec<String> = tables
+            cleanup_table_sql = tables
                 .iter()
                 .map(|table_name| {
                     format!(
