@@ -3,7 +3,7 @@ use log::*;
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
 use postgres_query::{query, query_dyn};
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
 use crate::{metrics, AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};
 
@@ -310,6 +310,16 @@ impl SlotsProcessing {
     }
 }
 
+fn secs_since_epoch() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs()
+}
+fn epoch_secs_to_time(secs: u64) -> std::time::SystemTime {
+    std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs)
+}
+
 pub async fn init(
     config: &PostgresConfig,
     account_tables: AccountTables,
@@ -341,6 +351,8 @@ pub async fn init(
         let config = config.clone();
         let mut metric_retries =
             metrics_sender.register_u64("postgres_account_write_retries".into());
+        let mut metric_last_write =
+            metrics_sender.register_u64("postgres_account_write_last_write_timestamp".into());
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
@@ -397,6 +409,7 @@ pub async fn init(
                     };
                     break;
                 }
+                metric_last_write.set_max(secs_since_epoch());
             }
         });
     }
@@ -444,6 +457,8 @@ pub async fn init(
         let receiver_c = slot_inserter_receiver.clone();
         let config = config.clone();
         let mut metric_retries = metrics_sender.register_u64("postgres_slot_update_retries".into());
+        let mut metric_last_write =
+            metrics_sender.register_u64("postgres_slot_last_write_timestamp".into());
         let slots_processing = slots_processing.clone();
         tokio::spawn(async move {
             let mut client_opt = None;
@@ -474,6 +489,62 @@ pub async fn init(
                     };
                     break;
                 }
+                metric_last_write.set_max(secs_since_epoch());
+            }
+        });
+    }
+
+    // postgres metrics/monitoring thread
+    {
+        let postgres_con =
+            postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
+                .await?;
+        let metric_slot_last_write =
+            metrics_sender.register_u64("postgres_slot_last_write_timestamp".into());
+        let metric_account_write_last_write =
+            metrics_sender.register_u64("postgres_account_write_last_write_timestamp".into());
+        let metric_account_queue = metrics_sender.register_u64("account_write_queue".into());
+        let metric_slot_queue = metrics_sender.register_u64("slot_insert_queue".into());
+        let config = config.clone();
+        tokio::spawn(async move {
+            let mut client_opt = None;
+            loop {
+                tokio::time::sleep(Duration::from_secs(config.monitoring_update_frequency_secs))
+                    .await;
+
+                let client = update_postgres_client(&mut client_opt, &postgres_con, &config).await;
+                let last_update = std::time::SystemTime::now();
+                let last_slot_write = epoch_secs_to_time(metric_slot_last_write.value());
+                let last_account_write_write =
+                    epoch_secs_to_time(metric_account_write_last_write.value());
+                let slot_queue = i64::try_from(metric_slot_queue.value()).unwrap();
+                let account_write_queue = i64::try_from(metric_account_queue.value()).unwrap();
+                let query = query!(
+                    "INSERT INTO monitoring
+                        (name, last_update, last_slot_write, last_account_write_write, slot_queue, account_write_queue)
+                    VALUES
+                        ($name, $last_update, $last_slot_write, $last_account_write_write, $slot_queue, $account_write_queue)
+                    ON CONFLICT (name) DO UPDATE SET
+                        last_update=$last_update,
+                        last_slot_write=$last_slot_write,
+                        last_account_write_write=$last_account_write_write,
+                        slot_queue=$slot_queue,
+                        account_write_queue=$account_write_queue
+                    ",
+                    name = config.monitoring_name,
+                    last_update,
+                    last_slot_write,
+                    last_account_write_write,
+                    slot_queue,
+                    account_write_queue,
+                );
+                if let Err(err) = query
+                    .execute(client)
+                    .await
+                    .context("updating monitoring table")
+                {
+                    warn!("failed to process monitoring update: {:?}", err);
+                };
             }
         });
     }

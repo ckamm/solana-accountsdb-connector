@@ -24,8 +24,16 @@ pub struct MetricU64 {
     value: Arc<atomic::AtomicU64>,
 }
 impl MetricU64 {
+    pub fn value(&self) -> u64 {
+        self.value.load(atomic::Ordering::Acquire)
+    }
+
     pub fn set(&mut self, value: u64) {
         self.value.store(value, atomic::Ordering::Release);
+    }
+
+    pub fn set_max(&mut self, value: u64) {
+        self.value.fetch_max(value, atomic::Ordering::AcqRel);
     }
 
     pub fn add(&mut self, value: u64) {
@@ -77,30 +85,42 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn register_u64(&self, name: String) -> MetricU64 {
-        let value = Arc::new(atomic::AtomicU64::new(0));
-        self.registry
-            .write()
-            .unwrap()
-            .insert(name, Value::U64(value.clone()));
-        MetricU64 { value }
+        let mut registry = self.registry.write().unwrap();
+        let value = registry
+            .entry(name)
+            .or_insert(Value::U64(Arc::new(atomic::AtomicU64::new(0))));
+        MetricU64 {
+            value: match value {
+                Value::U64(v) => v.clone(),
+                _ => panic!("bad metric type"),
+            },
+        }
     }
 
     pub fn register_i64(&self, name: String) -> MetricI64 {
-        let value = Arc::new(atomic::AtomicI64::new(0));
-        self.registry
-            .write()
-            .unwrap()
-            .insert(name, Value::I64(value.clone()));
-        MetricI64 { value }
+        let mut registry = self.registry.write().unwrap();
+        let value = registry
+            .entry(name)
+            .or_insert(Value::I64(Arc::new(atomic::AtomicI64::new(0))));
+        MetricI64 {
+            value: match value {
+                Value::I64(v) => v.clone(),
+                _ => panic!("bad metric type"),
+            },
+        }
     }
 
     pub fn register_string(&self, name: String) -> MetricString {
-        let value = Arc::new(Mutex::new(String::new()));
-        self.registry
-            .write()
-            .unwrap()
-            .insert(name, Value::String(value.clone()));
-        MetricString { value }
+        let mut registry = self.registry.write().unwrap();
+        let value = registry
+            .entry(name)
+            .or_insert(Value::String(Arc::new(Mutex::new(String::new()))));
+        MetricString {
+            value: match value {
+                Value::String(v) => v.clone(),
+                _ => panic!("bad metric type"),
+            },
+        }
     }
 }
 

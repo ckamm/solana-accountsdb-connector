@@ -8,6 +8,15 @@ CREATE TYPE "SlotStatus" AS ENUM (
     'Processed'
 );
 
+CREATE TABLE monitoring (
+    name TEXT PRIMARY KEY,
+    last_update TIMESTAMP WITH TIME ZONE,
+    last_slot_write TIMESTAMP WITH TIME ZONE,
+    last_account_write_write TIMESTAMP WITH TIME ZONE,
+    slot_queue BIGINT,
+    account_write_queue BIGINT
+);
+
 CREATE TABLE pubkey (
     pubkey_id BIGSERIAL PRIMARY KEY,
     pubkey VARCHAR(44) NOT NULL UNIQUE

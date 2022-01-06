@@ -86,6 +86,10 @@ pub struct PostgresConfig {
     pub allow_invalid_certs: bool,
     /// Delete old data automatically, keeping only the current data snapshot
     pub delete_old_data: bool,
+    /// Name key to use in the monitoring table
+    pub monitoring_name: String,
+    /// Frequency with which to update the monitoring table
+    pub monitoring_update_frequency_secs: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
