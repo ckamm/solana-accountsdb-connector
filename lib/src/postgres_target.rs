@@ -178,13 +178,15 @@ fn make_cleanup_steps(tables: &Vec<String>) -> HashMap<String, String> {
             .iter()
             .map(|table_name| {
                 let sql = format!(
-                    "DELETE FROM {table} AS data
+                    "WITH newest_rooted AS (SELECT max(slot) AS newest_rooted_slot FROM slot WHERE status = 'Rooted')
+                DELETE FROM {table} AS data
                 USING
-                    (SELECT max(slot) AS newest_rooted_slot FROM slot WHERE status = 'Rooted') s,
+                    newest_rooted,
                     (SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
                      FROM {table}
                      LEFT JOIN slot USING(slot)
-                     WHERE status = 'Rooted' OR status is NULL
+                     CROSS JOIN newest_rooted
+                     WHERE slot <= newest_rooted_slot AND (status = 'Rooted' OR status is NULL)
                      ORDER BY pubkey_id, slot DESC, write_version DESC
                      ) newest_rooted_write
                 WHERE data.pubkey_id = newest_rooted_write.pubkey_id
