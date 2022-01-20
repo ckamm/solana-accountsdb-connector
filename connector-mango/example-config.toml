@@ -27,4 +27,5 @@ fatal_connection_timeout_secs = 600
 allow_invalid_certs = false
 delete_old_data = true
 monitoring_name = "example"
-monitoring_update_frequency_secs = 30
+monitoring_update_interval_secs = 30
+cleanup_interval_secs = 10

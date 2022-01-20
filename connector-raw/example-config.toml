@@ -29,3 +29,4 @@ delete_old_data = true
 monitoring_name = "example"
 monitoring_update_interval_secs = 30
 cleanup_interval_secs = 10
+
