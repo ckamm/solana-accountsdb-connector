@@ -61,6 +61,7 @@ CREATE TABLE account_write (
     data BYTEA,
     PRIMARY KEY (pubkey_id, slot, write_version)
 );
+CREATE UNIQUE INDEX account_write_searchkey on account_write(pubkey_id, slot DESC, write_version DESC);
 
 -- The table storing slot information
 CREATE TABLE slot (
