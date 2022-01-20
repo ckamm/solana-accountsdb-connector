@@ -165,61 +165,56 @@ impl Slots {
     }
 }
 
-#[derive(Clone)]
-struct SlotsProcessing {
-    cleanup_table_sql: Vec<String>,
+fn make_cleanup_steps(tables: &Vec<String>) -> HashMap<String, String> {
+    let mut steps = HashMap::<String, String>::new();
+
+    // Delete all account writes that came before the newest rooted slot except
+    // for the newest rooted write for each pubkey.
+    //
+    // This could be older rooted writes or writes in uncled slots that came
+    // before the newest rooted slot.
+    steps.extend(
+        tables
+            .iter()
+            .map(|table_name| {
+                let sql = format!(
+                    "DELETE FROM {table} AS data
+                USING
+                    (SELECT max(slot) AS newest_rooted_slot FROM slot WHERE status = 'Rooted') s,
+                    (SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
+                     FROM {table}
+                     LEFT JOIN slot USING(slot)
+                     WHERE status = 'Rooted' OR status is NULL
+                     ORDER BY pubkey_id, slot DESC, write_version DESC
+                     ) newest_rooted_write
+                WHERE data.pubkey_id = newest_rooted_write.pubkey_id
+                AND data.slot <= newest_rooted_slot
+                AND (data.slot != newest_rooted_write.slot OR data.write_version != newest_rooted_write.write_version)",
+                    table = table_name
+                );
+                (format!("delete old writes in {}", table_name), sql)
+            })
+            .collect::<HashMap<String, String>>(),
+    );
+
+    // Delete information about older slots
+    steps.insert(
+        "delete old slots".into(),
+        "DELETE FROM slot
+         USING (SELECT max(slot) as newest_rooted_slot FROM slot WHERE status = 'Rooted') s
+         WHERE slot + 1000 < newest_rooted_slot"
+            .into(),
+    );
+
+    steps
 }
 
+#[derive(Clone)]
+struct SlotsProcessing {}
+
 impl SlotsProcessing {
-    fn new(tables: &Vec<String>, delete_old_data: bool) -> Self {
-        let mut cleanup_table_sql = Vec::<String>::new();
-
-        if delete_old_data {
-            // Delete:
-            // 1. account writes that came before the newest rooted write
-            // 2. account writes that came after the newest rooted write but before
-            //    the newest rooted slot (like processed writes that never confirmed)
-            cleanup_table_sql = tables
-                .iter()
-                .map(|table_name| {
-                    format!(
-                        "DELETE FROM {table} AS data
-                        USING (
-                            SELECT DISTINCT ON(pubkey_id) pubkey_id, slot, write_version
-                            FROM {table}
-                            LEFT JOIN slot USING(slot)
-                            WHERE slot <= $newest_final_slot AND (status = 'Rooted' OR status is NULL)
-                            ORDER BY pubkey_id, slot DESC, write_version DESC
-                            ) latest_write
-                        WHERE data.pubkey_id = latest_write.pubkey_id
-                        AND (
-                            (data.slot < latest_write.slot
-                                OR (data.slot = latest_write.slot
-                                    AND data.write_version < latest_write.write_version
-                                )
-                            )
-                            OR
-                            (
-                                data.slot < $newest_final_slot
-                                AND
-                                (data.slot > latest_write.slot
-                                    OR (data.slot = latest_write.slot
-                                        AND data.write_version > latest_write.write_version
-                                    )
-                                )
-                            )
-                        )",
-                        table = table_name
-                    )
-                })
-                .collect();
-
-            // Delete old slots
-            cleanup_table_sql
-                .push("DELETE FROM slot WHERE slot + 100000 < $newest_final_slot".into());
-        }
-
-        Self { cleanup_table_sql }
+    fn new() -> Self {
+        Self {}
     }
 
     async fn process(
@@ -268,16 +263,6 @@ impl SlotsProcessing {
                 .execute(client)
                 .await
                 .context("updating preceding non-rooted slots")?;
-
-            // Keep only the newest rooted account write and also
-            // wipe old slots (if configured)
-            for cleanup_sql in &self.cleanup_table_sql {
-                let query = query_dyn!(cleanup_sql, newest_final_slot = update.slot)?;
-                let _ = query
-                    .execute(client)
-                    .await
-                    .context("deleting old account writes")?;
-            }
         }
 
         if meta.new_processed_head || meta.parent_update {
@@ -445,11 +430,7 @@ pub async fn init(
     });
 
     // postgres slot update worker threads
-    let table_names: Vec<String> = account_tables
-        .iter()
-        .map(|table| table.table_name().to_string())
-        .collect();
-    let slots_processing = SlotsProcessing::new(&table_names, config.delete_old_data);
+    let slots_processing = SlotsProcessing::new();
     for _ in 0..config.slot_update_connection_count {
         let postgres_slot =
             postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
@@ -494,6 +475,44 @@ pub async fn init(
         });
     }
 
+    // postgres cleanup thread
+    if config.cleanup_interval_secs > 0 {
+        let table_names: Vec<String> = account_tables
+            .iter()
+            .map(|table| table.table_name().to_string())
+            .collect();
+        let cleanup_steps = make_cleanup_steps(&table_names);
+
+        let postgres_con =
+            postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
+                .await?;
+        let mut metric_last_cleanup =
+            metrics_sender.register_u64("postgres_cleanup_last_success_timestamp".into());
+        let mut metric_cleanup_errors =
+            metrics_sender.register_u64("postgres_cleanup_errors".into());
+        let config = config.clone();
+        tokio::spawn(async move {
+            let mut client_opt = None;
+            loop {
+                tokio::time::sleep(Duration::from_secs(config.cleanup_interval_secs)).await;
+                let client = update_postgres_client(&mut client_opt, &postgres_con, &config).await;
+
+                let mut all_successful = true;
+                for (name, cleanup_sql) in &cleanup_steps {
+                    let query = query_dyn!(&cleanup_sql).unwrap();
+                    if let Err(err) = query.execute(client).await {
+                        warn!("failed to process cleanup step {}: {:?}", name, err);
+                        metric_cleanup_errors.increment();
+                        all_successful = false;
+                    }
+                }
+                if all_successful {
+                    metric_last_cleanup.set_max(secs_since_epoch());
+                }
+            }
+        });
+    }
+
     // postgres metrics/monitoring thread
     {
         let postgres_con =
@@ -509,7 +528,7 @@ pub async fn init(
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
-                tokio::time::sleep(Duration::from_secs(config.monitoring_update_frequency_secs))
+                tokio::time::sleep(Duration::from_secs(config.monitoring_update_interval_secs))
                     .await;
 
                 let client = update_postgres_client(&mut client_opt, &postgres_con, &config).await;

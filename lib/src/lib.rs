@@ -84,12 +84,12 @@ pub struct PostgresConfig {
     pub fatal_connection_timeout_secs: u64,
     /// Allow invalid TLS certificates, passed to native_tls danger_accept_invalid_certs
     pub allow_invalid_certs: bool,
-    /// Delete old data automatically, keeping only the current data snapshot
-    pub delete_old_data: bool,
     /// Name key to use in the monitoring table
     pub monitoring_name: String,
-    /// Frequency with which to update the monitoring table
-    pub monitoring_update_frequency_secs: u64,
+    /// Time between updates to the monitoring table
+    pub monitoring_update_interval_secs: u64,
+    /// Time between cleanup jobs (0 to disable)
+    pub cleanup_interval_secs: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
