@@ -105,14 +105,14 @@ Design and Reliability
 
 ```
 Solana    --------------->   Connector   ----------->   PostgreSQL
- node       jsonrpc/gRPC      service
+ nodes      jsonrpc/gRPC       nodes
 ```
 
 For reliability it is recommended to feed data from multiple Solana nodes into
-the Connector service.
+each Connector node.
 
-It is also allowed to run multiple Connector services that target the same
-PostgeSQL target database. (but has not been tested)
+It is also allowed to run multiple Connector nodes that target the same
+PostgeSQL target database.
 
 The Connector service is stateless (except for some caches). Restarting it is
 always safe.
