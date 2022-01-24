@@ -72,7 +72,8 @@ CREATE TABLE account_write (
     data BYTEA,
     PRIMARY KEY (pubkey_id, slot, write_version)
 );
-CREATE UNIQUE INDEX account_write_searchkey on account_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX account_write_searchkey on account_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX account_write_pubkey_id_idx on account_write(pubkey_id);
 
 -- The table storing slot information
 CREATE TABLE slot (
@@ -122,8 +123,8 @@ CREATE TABLE mango_account_write (
     padding BYTEA,
     PRIMARY KEY (pubkey_id, slot, write_version)
 );
-CREATE UNIQUE INDEX mango_account_write_searchkey on mango_account_write(pubkey_id, slot DESC, write_version DESC);
-
+CREATE INDEX mango_account_write_searchkey on mango_account_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX mango_account_write_pubkey_id_idx on mango_account_write(pubkey_id);
 
 CREATE TYPE "TokenInfo" AS (
     mint varchar(44), -- TODO: also use pubkey table? but is unergonomic
@@ -179,7 +180,8 @@ CREATE TABLE mango_group_write (
     padding BYTEA,
     PRIMARY KEY (pubkey_id, slot, write_version)
 );
-CREATE UNIQUE INDEX mango_group_write_searchkey on mango_group_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX mango_group_write_searchkey on mango_group_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX mango_group_write_pubkey_id_idx on mango_group_write(pubkey_id);
 
 CREATE TYPE "PriceCache" AS (
     price NUMERIC, -- I80F48
@@ -210,4 +212,5 @@ CREATE TABLE mango_cache_write (
     perp_market_cache "PerpMarketCache"[],
     PRIMARY KEY (pubkey_id, slot, write_version)
 );
-CREATE UNIQUE INDEX mango_cache_write_searchkey on mango_cache_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX mango_cache_write_searchkey on mango_cache_write(pubkey_id, slot DESC, write_version DESC);
+CREATE INDEX mango_cache_write_pubkey_id_idx on mango_cache_write(pubkey_id);
