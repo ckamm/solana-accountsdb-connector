@@ -12,7 +12,10 @@ use {
         AccountsDbPlugin, AccountsDbPluginError, ReplicaAccountInfoVersions,
         Result as PluginResult, SlotStatus,
     },
+    std::collections::HashSet,
+    std::convert::TryInto,
     std::sync::atomic::{AtomicU64, Ordering},
+    std::sync::RwLock,
     std::{fs::File, io::Read, sync::Arc},
     tokio::sync::{broadcast, mpsc},
     tonic::transport::Server,
@@ -104,6 +107,12 @@ pub struct PluginData {
 
     /// Largest slot that an account write was processed for
     highest_write_slot: Arc<AtomicU64>,
+
+    /// Accounts that saw account writes
+    ///
+    /// Needed to catch writes that signal account closure, where
+    /// lamports=0 and owner=system-program.
+    active_accounts: RwLock<HashSet<[u8; 32]>>,
 }
 
 #[derive(Default)]
@@ -204,6 +213,7 @@ impl AccountsDbPlugin for Plugin {
             server_exit_sender: Some(server_exit_sender),
             accounts_selector,
             highest_write_slot,
+            active_accounts: RwLock::new(HashSet::new()),
         });
 
         Ok(())
@@ -234,11 +244,31 @@ impl AccountsDbPlugin for Plugin {
         let data = self.data.as_ref().expect("plugin must be initialized");
         match account {
             ReplicaAccountInfoVersions::V0_0_1(account) => {
-                if !data
-                    .accounts_selector
-                    .is_account_selected(account.pubkey, account.owner)
-                {
+                if account.pubkey.len() != 32 {
+                    error!(
+                        "bad account pubkey length: {}",
+                        bs58::encode(account.pubkey).into_string()
+                    );
                     return Ok(());
+                }
+
+                // Select only accounts configured to look at, plus writes to accounts
+                // that were previously selected (to catch closures and account reuse)
+                let is_selected = data
+                    .accounts_selector
+                    .is_account_selected(account.pubkey, account.owner);
+                let previously_selected = {
+                    let read = data.active_accounts.read().unwrap();
+                    read.contains(&account.pubkey[0..32])
+                };
+                if !is_selected && !previously_selected {
+                    return Ok(());
+                }
+
+                // If the account is newly selected, add it
+                if !previously_selected {
+                    let mut write = data.active_accounts.write().unwrap();
+                    write.insert(account.pubkey.try_into().unwrap());
                 }
 
                 data.highest_write_slot.fetch_max(slot, Ordering::SeqCst);
@@ -260,6 +290,7 @@ impl AccountsDbPlugin for Plugin {
                     executable: account.executable,
                     rent_epoch: account.rent_epoch,
                     data: account.data.to_vec(),
+                    is_selected,
                 }));
             }
         }
