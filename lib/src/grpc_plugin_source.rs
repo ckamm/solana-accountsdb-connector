@@ -339,6 +339,7 @@ pub async fn process_events(
                                 executable: update.executable,
                                 rent_epoch: update.rent_epoch as i64,
                                 data: update.data,
+                                is_selected: update.is_selected,
                             })
                             .await
                             .expect("send success");

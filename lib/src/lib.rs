@@ -34,6 +34,7 @@ pub struct AccountWrite {
     pub executable: bool,
     pub rent_epoch: i64,
     pub data: Vec<u8>,
+    pub is_selected: bool,
 }
 
 impl AccountWrite {
@@ -47,6 +48,7 @@ impl AccountWrite {
             executable: account.executable,
             rent_epoch: account.rent_epoch as i64, // TODO: narrowing!
             data: account.data,
+            is_selected: true,
         }
     }
 }
@@ -157,15 +159,16 @@ impl AccountTable for RawAccountTable {
         // TODO: should update for same write_version to work with websocket input
         let query = postgres_query::query!(
             "INSERT INTO account_write
-            (pubkey_id, slot, write_version,
+            (pubkey_id, slot, write_version, is_selected,
              owner_id, lamports, executable, rent_epoch, data)
             VALUES
-            (map_pubkey($pubkey), $slot, $write_version,
+            (map_pubkey($pubkey), $slot, $write_version, $is_selected,
              map_pubkey($owner), $lamports, $executable, $rent_epoch, $data)
             ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
             slot = account_write.slot,
             write_version = account_write.write_version,
+            is_selected = account_write.is_selected,
             owner,
             lamports = account_write.lamports,
             executable = account_write.executable,

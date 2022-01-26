@@ -54,6 +54,7 @@ CREATE TABLE account_write (
     pubkey_id BIGINT NOT NULL REFERENCES pubkey,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
+    is_selected BOOL NOT NULL,
     owner_id BIGINT REFERENCES pubkey,
     lamports BIGINT NOT NULL,
     executable BOOL NOT NULL,
