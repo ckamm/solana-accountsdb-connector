@@ -113,6 +113,8 @@ pub struct PluginData {
     /// Needed to catch writes that signal account closure, where
     /// lamports=0 and owner=system-program.
     active_accounts: RwLock<HashSet<[u8; 32]>>,
+
+    highest_slot_slot: Arc<AtomicU64>,
 }
 
 #[derive(Default)]
@@ -213,6 +215,7 @@ impl AccountsDbPlugin for Plugin {
             server_exit_sender: Some(server_exit_sender),
             accounts_selector,
             highest_write_slot,
+            highest_slot_slot: Arc::new(AtomicU64::new(0)),
             active_accounts: RwLock::new(HashSet::new()),
         });
 
@@ -242,6 +245,18 @@ impl AccountsDbPlugin for Plugin {
         is_startup: bool,
     ) -> PluginResult<()> {
         let data = self.data.as_ref().expect("plugin must be initialized");
+        if data.highest_write_slot.fetch_max(slot, Ordering::SeqCst) < slot {
+            use std::time::SystemTime;
+            warn!(
+                "new write slot: {} {}",
+                slot,
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
+        }
+
         match account {
             ReplicaAccountInfoVersions::V0_0_1(account) => {
                 if account.pubkey.len() != 32 {
@@ -270,8 +285,6 @@ impl AccountsDbPlugin for Plugin {
                     let mut write = data.active_accounts.write().unwrap();
                     write.insert(account.pubkey.try_into().unwrap());
                 }
-
-                data.highest_write_slot.fetch_max(slot, Ordering::SeqCst);
 
                 debug!(
                     "Updating account {:?} with owner {:?} at slot {:?}",
@@ -305,6 +318,18 @@ impl AccountsDbPlugin for Plugin {
     ) -> PluginResult<()> {
         let data = self.data.as_ref().expect("plugin must be initialized");
         debug!("Updating slot {:?} at with status {:?}", slot, status);
+
+        if data.highest_slot_slot.fetch_max(slot, Ordering::SeqCst) < slot {
+            use std::time::SystemTime;
+            warn!(
+                "new slot: {} {}",
+                slot,
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            );
+        }
 
         let status = match status {
             SlotStatus::Processed => SlotUpdateStatus::Processed,
