@@ -338,7 +338,7 @@ pub async fn init(
 )> {
     // The actual message may want to also contain a retry count, if it self-reinserts on failure?
     let (account_write_queue_sender, account_write_queue_receiver) =
-        async_channel::unbounded::<AccountWrite>();
+        async_channel::bounded::<AccountWrite>(config.account_write_max_queue_size);
 
     // Slot updates flowing from the outside into the single processing thread. From
     // there they'll flow into the postgres sending thread.

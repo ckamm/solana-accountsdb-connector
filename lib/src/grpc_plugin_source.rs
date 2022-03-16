@@ -242,7 +242,8 @@ pub async fn process_events(
     metrics_sender: metrics::Metrics,
 ) {
     // Subscribe to accountsdb
-    let (msg_sender, msg_receiver) = async_channel::unbounded::<Message>();
+    let (msg_sender, msg_receiver) =
+        async_channel::bounded::<Message>(config.postgres_target.account_write_max_queue_size);
     for grpc_source in config.grpc_sources {
         let msg_sender = msg_sender.clone();
         let snapshot_source = config.snapshot_source.clone();

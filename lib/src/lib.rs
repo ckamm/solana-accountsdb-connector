@@ -74,6 +74,8 @@ pub struct PostgresConfig {
     pub account_write_connection_count: u64,
     /// Maximum batch size for account write inserts over one connection
     pub account_write_max_batch_size: usize,
+    /// Max size of account write queues
+    pub account_write_max_queue_size: usize,
     /// Number of parallel postgres connections used for slot insertions
     pub slot_update_connection_count: u64,
     /// Number of queries retries before fatal error
