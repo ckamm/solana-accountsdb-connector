@@ -1,16 +1,16 @@
 use {
     crate::accounts_selector::AccountsSelector,
+    bs58,
     geyser_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
         SlotUpdate, SubscribeRequest, SubscribeResponse, Update,
     },
-    bs58,
     log::*,
     serde_derive::Deserialize,
     serde_json,
     solana_geyser_plugin_interface::geyser_plugin_interface::{
-        GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions,
-        Result as PluginResult, SlotStatus,
+        GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, Result as PluginResult,
+        SlotStatus,
     },
     std::collections::HashSet,
     std::convert::TryInto,
@@ -28,7 +28,7 @@ pub mod geyser_proto {
 pub mod geyser_service {
     use super::*;
     use {
-        geyser_proto::geyser_server::Geyser,
+        geyser_proto::accounts_db_server::AccountsDb,
         tokio_stream::wrappers::ReceiverStream,
         tonic::{Code, Request, Response, Status},
     };
@@ -58,7 +58,7 @@ pub mod geyser_service {
     }
 
     #[tonic::async_trait]
-    impl Geyser for Service {
+    impl AccountsDb for Service {
         type SubscribeStream = ReceiverStream<Result<Update, Status>>;
 
         async fn subscribe(
@@ -171,11 +171,13 @@ impl GeyserPlugin for Plugin {
             }
         })?;
 
-        let addr = config.bind_address.parse().map_err(|err| {
-            GeyserPluginError::ConfigFileReadError {
-                msg: format!("Error parsing the bind_address {:?}", err),
-            }
-        })?;
+        let addr =
+            config
+                .bind_address
+                .parse()
+                .map_err(|err| GeyserPluginError::ConfigFileReadError {
+                    msg: format!("Error parsing the bind_address {:?}", err),
+                })?;
 
         let highest_write_slot = Arc::new(AtomicU64::new(0));
         let service =
@@ -183,7 +185,7 @@ impl GeyserPlugin for Plugin {
         let (server_exit_sender, mut server_exit_receiver) = broadcast::channel::<()>(1);
         let server_broadcast = service.sender.clone();
 
-        let server = geyser_proto::geyser_server::GeyserServer::new(service);
+        let server = geyser_proto::accounts_db_server::AccountsDbServer::new(service);
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.spawn(Server::builder().add_service(server).serve_with_shutdown(
             addr,

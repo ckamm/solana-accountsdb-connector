@@ -4,7 +4,7 @@ use jsonrpc_core_client::transports::http;
 use solana_account_decoder::UiAccountEncoding;
 use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
 use solana_client::rpc_response::{Response, RpcKeyedAccount};
-use solana_rpc::{rpc::OptionalContext, rpc::rpc_accounts::AccountsDataClient};
+use solana_rpc::{rpc::rpc_accounts::AccountsDataClient, rpc::OptionalContext};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use futures::{future, future::FutureExt};
@@ -16,7 +16,7 @@ use std::{collections::HashMap, str::FromStr, time::Duration};
 pub mod geyser_proto {
     tonic::include_proto!("geyser");
 }
-use geyser_proto::geyser_client::GeyserClient;
+use geyser_proto::accounts_db_client::AccountsDbClient;
 
 use crate::{
     metrics, AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
@@ -77,7 +77,7 @@ async fn feed_data_geyser(
     }
     .connect()
     .await?;
-    let mut client = GeyserClient::new(channel);
+    let mut client = AccountsDbClient::new(channel);
 
     let mut update_stream = client
         .subscribe(geyser_proto::SubscribeRequest {})

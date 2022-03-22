@@ -6,7 +6,7 @@ option java_outer_classname = "GeyserProto";
 
 package geyser;
 
-service Geyser {
+service AccountsDb {
   rpc Subscribe(SubscribeRequest) returns (stream Update) {}
 }
 
