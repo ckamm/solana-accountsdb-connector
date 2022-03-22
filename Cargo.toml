@@ -1,6 +1,6 @@
 [workspace]
 members = [
-        "accountsdb-plugin-grpc",
+        "geyser-plugin-grpc",
         "lib",
         "connector-raw",
         "connector-mango",
@@ -10,13 +10,4 @@ members = [
 [patch.crates-io]
 # for gzip encoded responses
 jsonrpc-core-client = { git = "https://github.com/ckamm/jsonrpc.git", branch = "ckamm/http-with-gzip" }
-
-#solana-accountsdb-plugin-interface = { path = "../solana-accountsdb/accountsdb-plugin-interface" }
-#solana-logger = { path = "../solana-accountsdb/logger" }
-#solana-metrics = { path = "../solana-accountsdb/metrics" }
-#solana-sdk = { path = "../solana-accountsdb/sdk" }
-#solana-program = { path = "../solana-accountsdb/sdk/program" }
-#anchor-lang = { path = "../anchor/lang" } # armani/solana branch for 1.8
-
-#mango = { path = "../mango-v3-dep/program" }
 

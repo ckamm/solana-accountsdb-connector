@@ -7,7 +7,7 @@ use solana_client::{
     //rpc_filter::RpcFilterType,
     rpc_response::{Response, RpcKeyedAccount},
 };
-use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext, rpc_pubsub::RpcSolPubSubClient};
+use solana_rpc::{rpc::OptionalContext, rpc_pubsub::RpcSolPubSubClient, rpc::rpc_accounts::AccountsDataClient};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use log::*;
@@ -37,7 +37,7 @@ async fn feed_data(
     let client = connect.await.map_err_anyhow()?;
 
     let rpc_client =
-        http::connect_with_options::<FullClient>(&config.snapshot_source.rpc_http_url, true)
+        http::connect_with_options::<AccountsDataClient>(&config.snapshot_source.rpc_http_url, true)
             .await
             .map_err_anyhow()?;
 

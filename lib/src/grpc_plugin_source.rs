@@ -4,7 +4,7 @@ use jsonrpc_core_client::transports::http;
 use solana_account_decoder::UiAccountEncoding;
 use solana_client::rpc_config::{RpcAccountInfoConfig, RpcProgramAccountsConfig};
 use solana_client::rpc_response::{Response, RpcKeyedAccount};
-use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext};
+use solana_rpc::{rpc::OptionalContext, rpc::rpc_accounts::AccountsDataClient};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use futures::{future, future::FutureExt};
@@ -13,10 +13,10 @@ use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Identity};
 use log::*;
 use std::{collections::HashMap, str::FromStr, time::Duration};
 
-pub mod accountsdb_proto {
-    tonic::include_proto!("accountsdb");
+pub mod geyser_proto {
+    tonic::include_proto!("geyser");
 }
-use accountsdb_proto::accounts_db_client::AccountsDbClient;
+use geyser_proto::geyser_client::GeyserClient;
 
 use crate::{
     metrics, AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
@@ -26,7 +26,7 @@ use crate::{
 type SnapshotData = Response<Vec<RpcKeyedAccount>>;
 
 enum Message {
-    GrpcUpdate(accountsdb_proto::Update),
+    GrpcUpdate(geyser_proto::Update),
     Snapshot(SnapshotData),
 }
 
@@ -34,7 +34,7 @@ async fn get_snapshot(
     rpc_http_url: String,
     program_id: Pubkey,
 ) -> anyhow::Result<OptionalContext<Vec<RpcKeyedAccount>>> {
-    let rpc_client = http::connect_with_options::<FullClient>(&rpc_http_url, true)
+    let rpc_client = http::connect_with_options::<AccountsDataClient>(&rpc_http_url, true)
         .await
         .map_err_anyhow()?;
 
@@ -61,7 +61,7 @@ async fn get_snapshot(
     Ok(account_snapshot)
 }
 
-async fn feed_data_accountsdb(
+async fn feed_data_geyser(
     grpc_config: &GrpcSourceConfig,
     tls_config: Option<ClientTlsConfig>,
     snapshot_config: &SnapshotSourceConfig,
@@ -77,10 +77,10 @@ async fn feed_data_accountsdb(
     }
     .connect()
     .await?;
-    let mut client = AccountsDbClient::new(channel);
+    let mut client = GeyserClient::new(channel);
 
     let mut update_stream = client
-        .subscribe(accountsdb_proto::SubscribeRequest {})
+        .subscribe(geyser_proto::SubscribeRequest {})
         .await?
         .into_inner();
 
@@ -139,8 +139,8 @@ async fn feed_data_accountsdb(
     loop {
         tokio::select! {
             update = update_stream.next() => {
-                use accountsdb_proto::{update::UpdateOneof, slot_update::Status};
-                let mut update = update.ok_or(anyhow::anyhow!("accountsdb plugin has closed the stream"))??;
+                use geyser_proto::{update::UpdateOneof, slot_update::Status};
+                let mut update = update.ok_or(anyhow::anyhow!("geyser plugin has closed the stream"))??;
                 match update.update_oneof.as_mut().expect("invalid grpc") {
                     UpdateOneof::SubscribeResponse(subscribe_response) => {
                         first_full_slot = subscribe_response.highest_write_slot + 1;
@@ -188,7 +188,7 @@ async fn feed_data_accountsdb(
                         write.write_version = *writes as u64;
                         *writes += 1;
                     },
-                    accountsdb_proto::update::UpdateOneof::Ping(_) => {},
+                    geyser_proto::update::UpdateOneof::Ping(_) => {},
                 }
                 sender.send(Message::GrpcUpdate(update)).await.expect("send success");
             },
@@ -216,7 +216,7 @@ async fn feed_data_accountsdb(
                 }
             },
             _ = tokio::time::sleep(fatal_idle_timeout) => {
-                anyhow::bail!("accountsdb plugin hasn't sent a message in too long");
+                anyhow::bail!("geyser plugin hasn't sent a message in too long");
             }
         }
     }
@@ -241,7 +241,7 @@ pub async fn process_events(
     slot_queue_sender: async_channel::Sender<SlotUpdate>,
     metrics_sender: metrics::Metrics,
 ) {
-    // Subscribe to accountsdb
+    // Subscribe to geyser
     let (msg_sender, msg_receiver) =
         async_channel::bounded::<Message>(config.postgres_target.account_write_max_queue_size);
     for grpc_source in config.grpc_sources {
@@ -263,7 +263,7 @@ pub async fn process_events(
             // Continuously reconnect on failure
             loop {
                 metric_status.set("connected".into());
-                let out = feed_data_accountsdb(
+                let out = feed_data_geyser(
                     &grpc_source,
                     tls_config.clone(),
                     &snapshot_source,
@@ -273,7 +273,7 @@ pub async fn process_events(
                 assert!(result.is_err());
                 if let Err(err) = result {
                     warn!(
-                        "error during communication with the accountsdb plugin. retrying. {:?}",
+                        "error during communication with the geyser plugin. retrying. {:?}",
                         err
                     );
                 }
@@ -313,7 +313,7 @@ pub async fn process_events(
         match msg {
             Message::GrpcUpdate(update) => {
                 match update.update_oneof.expect("invalid grpc") {
-                    accountsdb_proto::update::UpdateOneof::AccountWrite(update) => {
+                    geyser_proto::update::UpdateOneof::AccountWrite(update) => {
                         assert!(update.pubkey.len() == 32);
                         assert!(update.owner.len() == 32);
 
@@ -345,11 +345,11 @@ pub async fn process_events(
                             .await
                             .expect("send success");
                     }
-                    accountsdb_proto::update::UpdateOneof::SlotUpdate(update) => {
+                    geyser_proto::update::UpdateOneof::SlotUpdate(update) => {
                         metric_slot_updates.increment();
                         metric_slot_queue.set(slot_queue_sender.len() as u64);
 
-                        use accountsdb_proto::slot_update::Status;
+                        use geyser_proto::slot_update::Status;
                         let status = Status::from_i32(update.status).map(|v| match v {
                             Status::Processed => SlotStatus::Processed,
                             Status::Confirmed => SlotStatus::Confirmed,
@@ -370,8 +370,8 @@ pub async fn process_events(
                             .await
                             .expect("send success");
                     }
-                    accountsdb_proto::update::UpdateOneof::Ping(_) => {}
-                    accountsdb_proto::update::UpdateOneof::SubscribeResponse(_) => {}
+                    geyser_proto::update::UpdateOneof::Ping(_) => {}
+                    geyser_proto::update::UpdateOneof::SubscribeResponse(_) => {}
                 }
             }
             Message::Snapshot(update) => {

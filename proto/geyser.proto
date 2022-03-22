@@ -1,12 +1,12 @@
 syntax = "proto3";
 
 option java_multiple_files = true;
-option java_package = "mango.v3.accountsdb";
-option java_outer_classname = "AccountsDbProto";
+option java_package = "mango.v3.geyser";
+option java_outer_classname = "GeyserProto";
 
-package accountsdb;
+package geyser;
 
-service AccountsDb {
+service Geyser {
   rpc Subscribe(SubscribeRequest) returns (stream Update) {}
 }
 

@@ -2,15 +2,15 @@ use rand::Rng;
 use tokio::sync::{broadcast, mpsc};
 use tonic::transport::Server;
 
-pub mod accountsdb_proto {
-    tonic::include_proto!("accountsdb");
+pub mod geyser_proto {
+    tonic::include_proto!("geyser");
 }
-use accountsdb_proto::{update::UpdateOneof, SlotUpdate, SubscribeRequest, Update};
+use geyser_proto::{update::UpdateOneof, SlotUpdate, SubscribeRequest, Update};
 
-pub mod accountsdb_service {
+pub mod geyser_service {
     use super::*;
     use {
-        accountsdb_proto::accounts_db_server::AccountsDb,
+        geyser_proto::geyser_server::Geyser,
         tokio_stream::wrappers::ReceiverStream,
         tonic::{Request, Response, Status},
     };
@@ -28,7 +28,7 @@ pub mod accountsdb_service {
     }
 
     #[tonic::async_trait]
-    impl AccountsDb for Service {
+    impl Geyser for Service {
         type SubscribeStream = ReceiverStream<Result<Update, Status>>;
 
         async fn subscribe(
@@ -53,9 +53,9 @@ pub mod accountsdb_service {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
-    let service = accountsdb_service::Service::new();
+    let service = geyser_service::Service::new();
     let sender = service.sender.clone();
-    let svc = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
+    let svc = geyser_proto::geyser_server::GeyserServer::new(service);
 
     tokio::spawn(async move {
         let mut slot = 1;
