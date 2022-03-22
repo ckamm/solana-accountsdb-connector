@@ -1,6 +1,6 @@
 use {
     log::*,
-    solana_accountsdb_connector_lib::*,
+    solana_geyser_connector_lib::*,
     std::{fs::File, io::Read, sync::Arc},
 };
 
@@ -30,8 +30,8 @@ async fn main() -> anyhow::Result<()> {
         postgres_target::init(&config.postgres_target, account_tables, metrics_tx.clone()).await?;
 
     info!("postgres done");
-    let use_accountsdb = true;
-    if use_accountsdb {
+    let use_geyser = true;
+    if use_geyser {
         grpc_plugin_source::process_events(
             config,
             account_write_queue_sender,

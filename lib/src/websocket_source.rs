@@ -7,7 +7,9 @@ use solana_client::{
     //rpc_filter::RpcFilterType,
     rpc_response::{Response, RpcKeyedAccount},
 };
-use solana_rpc::{rpc::rpc_full::FullClient, rpc::OptionalContext, rpc_pubsub::RpcSolPubSubClient};
+use solana_rpc::{
+    rpc::rpc_accounts::AccountsDataClient, rpc::OptionalContext, rpc_pubsub::RpcSolPubSubClient,
+};
 use solana_sdk::{account::Account, commitment_config::CommitmentConfig, pubkey::Pubkey};
 
 use log::*;
@@ -36,10 +38,12 @@ async fn feed_data(
     let connect = ws::try_connect::<RpcSolPubSubClient>(&config.rpc_ws_url).map_err_anyhow()?;
     let client = connect.await.map_err_anyhow()?;
 
-    let rpc_client =
-        http::connect_with_options::<FullClient>(&config.snapshot_source.rpc_http_url, true)
-            .await
-            .map_err_anyhow()?;
+    let rpc_client = http::connect_with_options::<AccountsDataClient>(
+        &config.snapshot_source.rpc_http_url,
+        true,
+    )
+    .await
+    .map_err_anyhow()?;
 
     let account_info_config = RpcAccountInfoConfig {
         encoding: Some(UiAccountEncoding::Base64),

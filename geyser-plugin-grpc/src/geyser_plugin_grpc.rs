@@ -1,16 +1,16 @@
 use {
     crate::accounts_selector::AccountsSelector,
-    accountsdb_proto::{
+    bs58,
+    geyser_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
         SlotUpdate, SubscribeRequest, SubscribeResponse, Update,
     },
-    bs58,
     log::*,
     serde_derive::Deserialize,
     serde_json,
-    solana_accountsdb_plugin_interface::accountsdb_plugin_interface::{
-        AccountsDbPlugin, AccountsDbPluginError, ReplicaAccountInfoVersions,
-        Result as PluginResult, SlotStatus,
+    solana_geyser_plugin_interface::geyser_plugin_interface::{
+        GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, Result as PluginResult,
+        SlotStatus,
     },
     std::collections::HashSet,
     std::convert::TryInto,
@@ -21,14 +21,14 @@ use {
     tonic::transport::Server,
 };
 
-pub mod accountsdb_proto {
-    tonic::include_proto!("accountsdb");
+pub mod geyser_proto {
+    tonic::include_proto!("geyser");
 }
 
-pub mod accountsdb_service {
+pub mod geyser_service {
     use super::*;
     use {
-        accountsdb_proto::accounts_db_server::AccountsDb,
+        geyser_proto::accounts_db_server::AccountsDb,
         tokio_stream::wrappers::ReceiverStream,
         tonic::{Code, Request, Response, Status},
     };
@@ -130,7 +130,7 @@ impl std::fmt::Debug for Plugin {
 #[derive(Clone, Debug, Deserialize)]
 pub struct PluginConfig {
     pub bind_address: String,
-    pub service_config: accountsdb_service::ServiceConfig,
+    pub service_config: geyser_service::ServiceConfig,
 }
 
 impl PluginData {
@@ -142,9 +142,9 @@ impl PluginData {
     }
 }
 
-impl AccountsDbPlugin for Plugin {
+impl GeyserPlugin for Plugin {
     fn name(&self) -> &'static str {
-        "AccountsDbPluginGrpc"
+        "GeyserPluginGrpc"
     }
 
     fn on_load(&mut self, config_file: &str) -> PluginResult<()> {
@@ -163,7 +163,7 @@ impl AccountsDbPlugin for Plugin {
         let accounts_selector = Self::create_accounts_selector_from_config(&result);
 
         let config: PluginConfig = serde_json::from_str(&contents).map_err(|err| {
-            AccountsDbPluginError::ConfigFileReadError {
+            GeyserPluginError::ConfigFileReadError {
                 msg: format!(
                     "The config file is not in the JSON format expected: {:?}",
                     err
@@ -171,19 +171,21 @@ impl AccountsDbPlugin for Plugin {
             }
         })?;
 
-        let addr = config.bind_address.parse().map_err(|err| {
-            AccountsDbPluginError::ConfigFileReadError {
-                msg: format!("Error parsing the bind_address {:?}", err),
-            }
-        })?;
+        let addr =
+            config
+                .bind_address
+                .parse()
+                .map_err(|err| GeyserPluginError::ConfigFileReadError {
+                    msg: format!("Error parsing the bind_address {:?}", err),
+                })?;
 
         let highest_write_slot = Arc::new(AtomicU64::new(0));
         let service =
-            accountsdb_service::Service::new(config.service_config, highest_write_slot.clone());
+            geyser_service::Service::new(config.service_config, highest_write_slot.clone());
         let (server_exit_sender, mut server_exit_receiver) = broadcast::channel::<()>(1);
         let server_broadcast = service.sender.clone();
 
-        let server = accountsdb_proto::accounts_db_server::AccountsDbServer::new(service);
+        let server = geyser_proto::accounts_db_server::AccountsDbServer::new(service);
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.spawn(Server::builder().add_service(server).serve_with_shutdown(
             addr,
@@ -363,10 +365,10 @@ impl Plugin {
 #[allow(improper_ctypes_definitions)]
 /// # Safety
 ///
-/// This function returns the Plugin pointer as trait AccountsDbPlugin.
-pub unsafe extern "C" fn _create_plugin() -> *mut dyn AccountsDbPlugin {
+/// This function returns the Plugin pointer as trait GeyserPlugin.
+pub unsafe extern "C" fn _create_plugin() -> *mut dyn GeyserPlugin {
     let plugin = Plugin::default();
-    let plugin: Box<dyn AccountsDbPlugin> = Box::new(plugin);
+    let plugin: Box<dyn GeyserPlugin> = Box::new(plugin);
     Box::into_raw(plugin)
 }
 

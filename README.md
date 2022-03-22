@@ -15,7 +15,7 @@ and `getProgramAccounts` queries generally. That would reduce load on Solana RPC
 nodes while decreasing response times.
 
 Supported Solana sources:
-- AccountsDB plugin (preferred) plus JSONRPC HTTP API (for initial snapshots)
+- Geyser plugin (preferred) plus JSONRPC HTTP API (for initial snapshots)
 
 Unfinished Solana sources:
 - JSONRPC websocket subscriptions plus JSONRPC HTTP API (for initial snapshots)
@@ -27,9 +27,9 @@ Supported targets:
 Components
 ==========
 
-- [`accountsdb-plugin-grpc/`](accountsdb-plugin-grpc/)
+- [`geyser-plugin-grpc/`](geyser-plugin-grpc/)
 
-  The Solana AccountsDB plugin. It opens a gRPC server (see [`proto/`](proto/)) and
+  The Solana Geyser plugin. It opens a gRPC server (see [`proto/`](proto/)) and
   broadcasts account and slot updates to all clients that connect.
 
 - [`lib/`](lib/)
@@ -56,17 +56,17 @@ Setup Tutorial
 1. Compile the project.
 
    Make sure that you are using _exactly_ the same Rust version for compiling the
-   AccountsDb plugin that was used for compiling your `solana-validator`! Otherwise
+   Geyser plugin that was used for compiling your `solana-validator`! Otherwise
    the plugin will crash the validator during startup!
 
 2. Prepare the plugin configuration file.
 
-   [Here is an example](accountsdb-plugin-grpc/example-config.json). This file
+   [Here is an example](geyser-plugin-grpc/example-config.json). This file
    points the validator to your plugin shared library, controls which accounts
    will be exported, which address the gRPC server will bind to and internal
    queue sizes.
 
-3. Run `solana-validator` with `--accountsdb-plugin-config myconfig.json`.
+3. Run `solana-validator` with `--geyser-plugin-config myconfig.json`.
 
    Check the logs to ensure the plugin was loaded.
 

@@ -1,12 +1,12 @@
 [package]
-name = "solana-accountsdb-connector-mango"
+name = "solana-geyser-connector-mango"
 version = "0.1.0"
 authors = ["Christian Kamm <mail@ckamm.de>"]
 edition = "2018"
 
 [dependencies]
-solana-accountsdb-connector-lib = { path = "../lib" }
-solana-logger = "=1.8.14"
+solana-geyser-connector-lib = { path = "../lib" }
+solana-logger = "=1.9.13"
 log = "0.4"
 anyhow = "1.0"
 toml = "0.5"
