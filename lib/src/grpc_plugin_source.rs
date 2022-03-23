@@ -19,8 +19,8 @@ pub mod geyser_proto {
 use geyser_proto::accounts_db_client::AccountsDbClient;
 
 use crate::{
-    metrics, AccountWrite, AnyhowWrap, Config, GrpcSourceConfig, SlotStatus, SlotUpdate,
-    SnapshotSourceConfig, TlsConfig,
+    metrics, AccountWrite, AnyhowWrap, GrpcSourceConfig, SlotStatus, SlotUpdate,
+    SnapshotSourceConfig, SourceConfig, TlsConfig,
 };
 
 type SnapshotData = Response<Vec<RpcKeyedAccount>>;
@@ -236,17 +236,16 @@ fn make_tls_config(config: &TlsConfig) -> ClientTlsConfig {
 }
 
 pub async fn process_events(
-    config: Config,
+    config: &SourceConfig,
     account_write_queue_sender: async_channel::Sender<AccountWrite>,
     slot_queue_sender: async_channel::Sender<SlotUpdate>,
     metrics_sender: metrics::Metrics,
 ) {
     // Subscribe to geyser
-    let (msg_sender, msg_receiver) =
-        async_channel::bounded::<Message>(config.postgres_target.account_write_max_queue_size);
-    for grpc_source in config.grpc_sources {
+    let (msg_sender, msg_receiver) = async_channel::bounded::<Message>(config.dedup_queue_size);
+    for grpc_source in config.grpc_sources.clone() {
         let msg_sender = msg_sender.clone();
-        let snapshot_source = config.snapshot_source.clone();
+        let snapshot_source = config.snapshot.clone();
         let metrics_sender = metrics_sender.clone();
 
         // Make TLS config if configured

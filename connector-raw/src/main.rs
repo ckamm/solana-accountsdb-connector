@@ -33,15 +33,19 @@ async fn main() -> anyhow::Result<()> {
     let use_geyser = true;
     if use_geyser {
         grpc_plugin_source::process_events(
-            config,
+            &config.source,
             account_write_queue_sender,
             slot_queue_sender,
             metrics_tx,
         )
         .await;
     } else {
-        websocket_source::process_events(config, account_write_queue_sender, slot_queue_sender)
-            .await;
+        websocket_source::process_events(
+            &config.source,
+            account_write_queue_sender,
+            slot_queue_sender,
+        )
+        .await;
     }
 
     Ok(())

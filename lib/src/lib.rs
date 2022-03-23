@@ -109,6 +109,14 @@ pub struct GrpcSourceConfig {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct SourceConfig {
+    pub dedup_queue_size: usize,
+    pub grpc_sources: Vec<GrpcSourceConfig>,
+    pub snapshot: SnapshotSourceConfig,
+    pub rpc_ws_url: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct SnapshotSourceConfig {
     pub rpc_http_url: String,
     pub program_id: String,
@@ -117,9 +125,7 @@ pub struct SnapshotSourceConfig {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub postgres_target: PostgresConfig,
-    pub grpc_sources: Vec<GrpcSourceConfig>,
-    pub snapshot_source: SnapshotSourceConfig,
-    pub rpc_ws_url: String,
+    pub source: SourceConfig,
 }
 
 #[async_trait]
