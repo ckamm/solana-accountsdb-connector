@@ -1,12 +1,15 @@
+pub mod chain_data;
 pub mod grpc_plugin_source;
+pub mod memory_target;
 pub mod metrics;
 pub mod postgres_target;
 pub mod postgres_types_numeric;
 pub mod websocket_source;
 
+pub use chain_data::SlotStatus;
+
 use {
     async_trait::async_trait,
-    postgres_types::ToSql,
     serde_derive::Deserialize,
     solana_sdk::{account::Account, pubkey::Pubkey},
     std::sync::Arc,
@@ -51,13 +54,6 @@ impl AccountWrite {
             is_selected: true,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, ToSql)]
-pub enum SlotStatus {
-    Rooted,
-    Confirmed,
-    Processed,
 }
 
 #[derive(Clone, Debug)]
