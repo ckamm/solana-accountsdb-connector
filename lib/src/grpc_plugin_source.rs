@@ -14,7 +14,7 @@ use log::*;
 use std::{collections::HashMap, str::FromStr, time::Duration};
 
 pub mod geyser_proto {
-    tonic::include_proto!("geyser");
+    tonic::include_proto!("accountsdb");
 }
 use geyser_proto::accounts_db_client::AccountsDbClient;
 

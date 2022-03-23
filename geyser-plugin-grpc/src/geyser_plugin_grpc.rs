@@ -22,7 +22,7 @@ use {
 };
 
 pub mod geyser_proto {
-    tonic::include_proto!("geyser");
+    tonic::include_proto!("accountsdb");
 }
 
 pub mod geyser_service {

@@ -3,7 +3,7 @@ use tokio::sync::{broadcast, mpsc};
 use tonic::transport::Server;
 
 pub mod geyser_proto {
-    tonic::include_proto!("geyser");
+    tonic::include_proto!("accountsdb");
 }
 use geyser_proto::{update::UpdateOneof, SlotUpdate, SubscribeRequest, Update};
 
