@@ -4,6 +4,7 @@ members = [
         "lib",
         "connector-raw",
         "connector-mango",
+        "mango-pnl-service",
 ]
 
 

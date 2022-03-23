@@ -2502,6 +2502,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "mango-pnl-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bs58 0.3.1",
+ "fixed",
+ "log 0.4.14",
+ "mango",
+ "mango-common",
+ "serde",
+ "serde_derive",
+ "solana-geyser-connector-lib",
+ "solana-logger",
+ "tokio",
+ "tokio-postgres",
+ "toml",
+]
+
+[[package]]
 name = "matches"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

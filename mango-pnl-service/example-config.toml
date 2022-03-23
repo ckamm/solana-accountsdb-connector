@@ -1,0 +1,19 @@
+[source]
+dedup_queue_size = 50000
+rpc_ws_url = ""
+
+[[source.grpc_sources]]
+name = "server"
+connection_string = "http://[::1]:10000"
+retry_connection_sleep_secs = 30
+
+#[source.grpc_sources.tls]
+#ca_cert_path = "ca.pem"
+#client_cert_path = "client.pem"
+#client_key_path = "client.pem"
+#domain_name = "example.com"
+
+[source.snapshot]
+rpc_http_url = ""
+program_id = "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68"
+
