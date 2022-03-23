@@ -12,13 +12,12 @@ anyhow = "1.0"
 toml = "0.5"
 
 async-trait = "0.1"
-fixed = { version = "=1.9.0", features = ["serde"] }
+fixed = { version = "1.9.0", features = ["serde"] }
 bs58 = "0.3.1"
 tokio = { version = "1", features = ["full"] }
 tokio-postgres = "0.7.4"
 postgres-types = { version = "0.2", features = ["array-impls", "derive"] }
 postgres_query = { git = "https://github.com/nolanderc/rust-postgres-query", rev = "b4422051c8a31fbba4a35f88004c1cefb1878dd5" }
 
-# The v3.2 branch currently has a conflicting syn version dependency, use a fixed version
-mango = { git = "https://github.com/ckamm/mango-v3", rev = "2e1e4886544bdb1c5f773a3856305210f622fa94" }
-mango-common = { git = "https://github.com/ckamm/mango-v3", rev = "2e1e4886544bdb1c5f773a3856305210f622fa94" }
+mango = { git = "https://github.com/blockworks-foundation/mango-v3", branch = "main" }
+mango-common = { git = "https://github.com/blockworks-foundation/mango-v3", branch = "main" }
