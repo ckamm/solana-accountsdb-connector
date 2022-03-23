@@ -169,21 +169,21 @@ pub async fn process_events(
                     solana_client::rpc_response::SlotUpdate::CreatedBank {
                         slot, parent, ..
                     } => Some(SlotUpdate {
-                        slot: slot as i64, // TODO: narrowing
-                        parent: Some(parent as i64),
+                        slot,
+                        parent: Some(parent),
                         status: SlotStatus::Processed,
                     }),
                     solana_client::rpc_response::SlotUpdate::OptimisticConfirmation {
                         slot,
                         ..
                     } => Some(SlotUpdate {
-                        slot: slot as i64, // TODO: narrowing
+                        slot,
                         parent: None,
                         status: SlotStatus::Confirmed,
                     }),
                     solana_client::rpc_response::SlotUpdate::Root { slot, .. } => {
                         Some(SlotUpdate {
-                            slot: slot as i64, // TODO: narrowing
+                            slot,
                             parent: None,
                             status: SlotStatus::Rooted,
                         })

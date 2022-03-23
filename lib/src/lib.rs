@@ -27,26 +27,26 @@ impl<T, E: std::fmt::Debug> AnyhowWrap for Result<T, E> {
 #[derive(Clone, PartialEq, Debug)]
 pub struct AccountWrite {
     pub pubkey: Pubkey,
-    pub slot: i64,
-    pub write_version: i64,
-    pub lamports: i64,
+    pub slot: u64,
+    pub write_version: u64,
+    pub lamports: u64,
     pub owner: Pubkey,
     pub executable: bool,
-    pub rent_epoch: i64,
+    pub rent_epoch: u64,
     pub data: Vec<u8>,
     pub is_selected: bool,
 }
 
 impl AccountWrite {
-    fn from(pubkey: Pubkey, slot: u64, write_version: i64, account: Account) -> AccountWrite {
+    fn from(pubkey: Pubkey, slot: u64, write_version: u64, account: Account) -> AccountWrite {
         AccountWrite {
             pubkey,
-            slot: slot as i64, // TODO: narrowing!
+            slot: slot,
             write_version,
-            lamports: account.lamports as i64, // TODO: narrowing!
+            lamports: account.lamports,
             owner: account.owner,
             executable: account.executable,
-            rent_epoch: account.rent_epoch as i64, // TODO: narrowing!
+            rent_epoch: account.rent_epoch,
             data: account.data,
             is_selected: true,
         }
@@ -62,9 +62,9 @@ pub enum SlotStatus {
 
 #[derive(Clone, Debug)]
 pub struct SlotUpdate {
-    pub slot: i64,
-    pub parent: Option<i64>,
-    pub status: SlotStatus,
+    pub slot: u64,
+    pub parent: Option<u64>,
+    pub status: chain_data::SlotStatus,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -157,6 +157,10 @@ impl AccountTable for RawAccountTable {
     ) -> anyhow::Result<()> {
         let pubkey = encode_address(&account_write.pubkey);
         let owner = encode_address(&account_write.owner);
+        let slot = account_write.slot as i64;
+        let write_version = account_write.write_version as i64;
+        let lamports = account_write.lamports as i64;
+        let rent_epoch = account_write.rent_epoch as i64;
 
         // TODO: should update for same write_version to work with websocket input
         let query = postgres_query::query!(
@@ -168,13 +172,13 @@ impl AccountTable for RawAccountTable {
              map_pubkey($owner), $lamports, $executable, $rent_epoch, $data)
             ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
-            slot = account_write.slot,
-            write_version = account_write.write_version,
+            slot,
+            write_version,
             is_selected = account_write.is_selected,
             owner,
-            lamports = account_write.lamports,
+            lamports,
             executable = account_write.executable,
-            rent_epoch = account_write.rent_epoch,
+            rent_epoch,
             data = account_write.data,
         );
         let _ = query.execute(client).await?;

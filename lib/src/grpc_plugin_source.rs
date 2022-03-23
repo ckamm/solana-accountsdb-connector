@@ -333,12 +333,12 @@ pub async fn process_events(
                         account_write_queue_sender
                             .send(AccountWrite {
                                 pubkey: Pubkey::new(&update.pubkey),
-                                slot: update.slot as i64, // TODO: narrowing
-                                write_version: update.write_version as i64,
-                                lamports: update.lamports as i64,
+                                slot: update.slot,
+                                write_version: update.write_version,
+                                lamports: update.lamports,
                                 owner: Pubkey::new(&update.owner),
                                 executable: update.executable,
-                                rent_epoch: update.rent_epoch as i64,
+                                rent_epoch: update.rent_epoch,
                                 data: update.data,
                                 is_selected: update.is_selected,
                             })
@@ -360,8 +360,8 @@ pub async fn process_events(
                             continue;
                         }
                         let slot_update = SlotUpdate {
-                            slot: update.slot as i64, // TODO: narrowing
-                            parent: update.parent.map(|v| v as i64),
+                            slot: update.slot,
+                            parent: update.parent,
                             status: status.expect("qed"),
                         };
 

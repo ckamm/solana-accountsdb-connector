@@ -7,6 +7,25 @@ use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
 use crate::{metrics, AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};
 
+mod pg {
+    #[derive(Clone, Copy, Debug, PartialEq, postgres_types::ToSql)]
+    pub enum SlotStatus {
+        Rooted,
+        Confirmed,
+        Processed,
+    }
+
+    impl From<super::SlotStatus> for SlotStatus {
+        fn from(status: super::SlotStatus) -> SlotStatus {
+            match status {
+                super::SlotStatus::Rooted => SlotStatus::Rooted,
+                super::SlotStatus::Confirmed => SlotStatus::Confirmed,
+                super::SlotStatus::Processed => SlotStatus::Processed,
+            }
+        }
+    }
+}
+
 async fn postgres_connection(
     config: &PostgresConfig,
     metric_retries: metrics::MetricU64,
@@ -98,9 +117,9 @@ async fn process_account_write(
 
 struct Slots {
     // non-rooted only
-    slots: HashMap<i64, SlotUpdate>,
-    newest_processed_slot: Option<i64>,
-    newest_rooted_slot: Option<i64>,
+    slots: HashMap<u64, SlotUpdate>,
+    newest_processed_slot: Option<u64>,
+    newest_rooted_slot: Option<u64>,
 }
 
 #[derive(Default)]
@@ -134,14 +153,16 @@ impl Slots {
                 previous.parent = update.parent;
                 result.parent_update = true;
             }
-        } else if update.slot > self.newest_rooted_slot.unwrap_or(-1) {
+        } else if self.newest_rooted_slot.is_none()
+            || update.slot > self.newest_rooted_slot.unwrap()
+        {
             self.slots.insert(update.slot, update.clone());
         } else {
             result.discard_old = true;
         }
 
         if update.status == SlotStatus::Rooted {
-            let old_slots: Vec<i64> = self
+            let old_slots: Vec<u64> = self
                 .slots
                 .keys()
                 .filter(|s| **s <= update.slot)
@@ -150,13 +171,14 @@ impl Slots {
             for old_slot in old_slots {
                 self.slots.remove(&old_slot);
             }
-            if self.newest_rooted_slot.unwrap_or(-1) < update.slot {
+            if self.newest_rooted_slot.is_none() || self.newest_rooted_slot.unwrap() < update.slot {
                 self.newest_rooted_slot = Some(update.slot);
                 result.new_rooted_head = true;
             }
         }
 
-        if self.newest_processed_slot.unwrap_or(-1) < update.slot {
+        if self.newest_processed_slot.is_none() || self.newest_processed_slot.unwrap() < update.slot
+        {
             self.newest_processed_slot = Some(update.slot);
             result.new_processed_head = true;
         }
@@ -246,7 +268,10 @@ impl SlotsProcessing {
         update: &SlotUpdate,
         meta: &SlotPreprocessing,
     ) -> anyhow::Result<()> {
+        let slot = update.slot as i64;
+        let status: pg::SlotStatus = update.status.into();
         if let Some(parent) = update.parent {
+            let parent = parent as i64;
             let query = query!(
                 "INSERT INTO slot
                     (slot, parent, status, uncle)
@@ -254,9 +279,9 @@ impl SlotsProcessing {
                     ($slot, $parent, $status, FALSE)
                 ON CONFLICT (slot) DO UPDATE SET
                     parent=$parent, status=$status",
-                slot = update.slot,
-                parent = parent,
-                status = update.status,
+                slot,
+                parent,
+                status,
             );
             let _ = query.execute(client).await.context("updating slot row")?;
         } else {
@@ -267,20 +292,21 @@ impl SlotsProcessing {
                     ($slot, NULL, $status, FALSE)
                 ON CONFLICT (slot) DO UPDATE SET
                     status=$status",
-                slot = update.slot,
-                status = update.status,
+                slot,
+                status,
             );
             let _ = query.execute(client).await.context("updating slot row")?;
         }
 
         if meta.new_rooted_head {
+            let slot = update.slot as i64;
             // Mark preceeding non-uncle slots as rooted
             let query = query!(
                 "UPDATE slot SET status = 'Rooted'
                 WHERE slot < $newest_final_slot
                 AND (NOT uncle)
                 AND status != 'Rooted'",
-                newest_final_slot = update.slot
+                newest_final_slot = slot
             );
             let _ = query
                 .execute(client)

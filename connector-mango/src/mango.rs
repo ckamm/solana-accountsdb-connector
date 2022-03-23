@@ -45,6 +45,8 @@ impl AccountTable for MangoAccountTable {
         let pubkey = encode_address(&account_write.pubkey);
         let data = MangoAccount::load_from_bytes(&account_write.data)?;
 
+        let slot = account_write.slot as i64;
+        let write_version = account_write.write_version as i64;
         let owner = encode_address(&data.owner);
         let mango_group = encode_address(&data.mango_group);
         let version = data.meta_data.version as i16;
@@ -128,8 +130,8 @@ impl AccountTable for MangoAccountTable {
             )
             ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
-            slot = account_write.slot,
-            write_version = account_write.write_version,
+            slot,
+            write_version,
             version,
             is_initialized = data.meta_data.is_initialized,
             extra_info,
@@ -210,6 +212,8 @@ impl AccountTable for MangoGroupTable {
 
         let pubkey = encode_address(&account_write.pubkey);
         let data = MangoGroup::load_from_bytes(&account_write.data)?;
+        let slot = account_write.slot as i64;
+        let write_version = account_write.write_version as i64;
         let version = data.meta_data.version as i16;
         let extra_info = &data.meta_data.extra_info as &[u8];
         let num_oracles = data.num_oracles as i64;
@@ -296,8 +300,8 @@ impl AccountTable for MangoGroupTable {
             $padding)
             ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
-            slot = account_write.slot,
-            write_version = account_write.write_version,
+            slot,
+            write_version,
             version,
             is_initialized = data.meta_data.is_initialized,
             extra_info,
@@ -364,6 +368,8 @@ impl AccountTable for MangoCacheTable {
 
         let pubkey = encode_address(&account_write.pubkey);
         let data = MangoCache::load_from_bytes(&account_write.data)?;
+        let slot = account_write.slot as i64;
+        let write_version = account_write.write_version as i64;
         let version = data.meta_data.version as i16;
         let extra_info = &data.meta_data.extra_info as &[u8];
         let price_cache = data
@@ -405,8 +411,8 @@ impl AccountTable for MangoCacheTable {
             $price_cache, $root_bank_cache, $perp_market_cache)
             ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
             pubkey,
-            slot = account_write.slot,
-            write_version = account_write.write_version,
+            slot,
+            write_version,
             version,
             is_initialized = data.meta_data.is_initialized,
             extra_info,
