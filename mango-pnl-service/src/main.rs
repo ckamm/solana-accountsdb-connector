@@ -18,8 +18,23 @@ use solana_sdk::account::ReadableAccount;
 use std::mem::size_of;
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct PnlConfig {
+    pub update_interval_millis: u64,
+    pub mango_program: String,
+    pub mango_group: String,
+    pub mango_cache: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct JsonRpcConfig {
+    pub bind_address: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub source: SourceConfig,
+    pub pnl: PnlConfig,
+    pub jsonrpc_server: JsonRpcConfig,
 }
 
 type PnlData = Vec<(Pubkey, [I80F48; MAX_PAIRS])>;
@@ -41,14 +56,21 @@ fn compute_pnl(
 }
 
 // regularly updates pnl_data from chain_data
-fn start_pnl_updater(chain_data: Arc<RwLock<ChainData>>, pnl_data: Arc<RwLock<PnlData>>) {
-    let program_pk = Pubkey::from_str("mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68").unwrap();
-    let group_pk = Pubkey::from_str("98pjRuQjK3qA6gXts96PqZT4Ze5QmnCmt3QYjhbUSPue").unwrap();
-    let cache_pk = Pubkey::from_str("EBDRoayCDDUvDgCimta45ajQeXbexv7aKqJubruqpyvu").unwrap();
+fn start_pnl_updater(
+    config: PnlConfig,
+    chain_data: Arc<RwLock<ChainData>>,
+    pnl_data: Arc<RwLock<PnlData>>,
+) {
+    let program_pk = Pubkey::from_str(&config.mango_program).unwrap();
+    let group_pk = Pubkey::from_str(&config.mango_group).unwrap();
+    let cache_pk = Pubkey::from_str(&config.mango_cache).unwrap();
 
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(
+                config.update_interval_millis,
+            ))
+            .await;
 
             let snapshot = chain_data.read().unwrap().accounts_snapshot();
 
@@ -106,25 +128,23 @@ struct PnlResponseItem {
     pubkey: String,
 }
 
-type UnsettledPnlRankedResponse = Vec<PnlResponseItem>;
-
 use jsonrpsee::http_server::HttpServerHandle;
-fn start_jsonrpc_server(pnl_data: Arc<RwLock<PnlData>>) -> anyhow::Result<HttpServerHandle> {
+fn start_jsonrpc_server(
+    config: JsonRpcConfig,
+    pnl_data: Arc<RwLock<PnlData>>,
+) -> anyhow::Result<HttpServerHandle> {
     use jsonrpsee::core::Error;
     use jsonrpsee::http_server::{HttpServerBuilder, RpcModule};
     use jsonrpsee::types::error::CallError;
     use std::net::SocketAddr;
 
-    let server = HttpServerBuilder::default().build("127.0.0.1:8889".parse::<SocketAddr>()?)?;
+    let server = HttpServerBuilder::default().build(config.bind_address.parse::<SocketAddr>()?)?;
     let mut module = RpcModule::new(());
     module.register_method("unsettledPnlRanked", move |params, _| {
         let req = params.parse::<UnsettledPnlRankedRequest>()?;
 
-        let invalid = |s| {
-            Err(Error::Call(CallError::InvalidParams(anyhow::anyhow!(
-                "'limit' must be <= 20"
-            ))))
-        };
+        let invalid =
+            |s: &'static str| Err(Error::Call(CallError::InvalidParams(anyhow::anyhow!(s))));
         let limit = req.limit as usize;
         if limit > 20 {
             return invalid("'limit' must be <= 20");
@@ -182,10 +202,10 @@ async fn main() -> anyhow::Result<()> {
     let chain_data = Arc::new(RwLock::new(ChainData::new()));
     let pnl_data = Arc::new(RwLock::new(PnlData::new()));
 
-    start_pnl_updater(chain_data.clone(), pnl_data.clone());
+    start_pnl_updater(config.pnl.clone(), chain_data.clone(), pnl_data.clone());
 
     // dropping the handle would exit the server
-    let http_server_handle = start_jsonrpc_server(pnl_data)?;
+    let _http_server_handle = start_jsonrpc_server(config.jsonrpc_server.clone(), pnl_data)?;
 
     // start filling chain_data from the grpc plugin source
     let (account_write_queue_sender, slot_queue_sender) = memory_target::init(chain_data).await?;
