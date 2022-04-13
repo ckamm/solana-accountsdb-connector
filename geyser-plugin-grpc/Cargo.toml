@@ -8,8 +8,8 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [[bin]]
-name = "test-server"
-path = "src/test_server.rs"
+name = "transaction-forwarder"
+path = "src/transaction_forwardooor.rs"
 
 [dependencies]
 bs58 = "0.4.0"
