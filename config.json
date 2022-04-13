@@ -1,0 +1,13 @@
+{
+    "libpath": "/Users/evanbatsell/Coding/w3/jito/solana-accountsdb-connector/target/release/libsolana_geyser_connector_plugin_grpc.dylib",
+    "accounts_selector" : {
+            "accounts" : [
+                "*"
+            ]
+    },
+    "bind_address": "127.0.0.1:10000",
+    "service_config": {
+            "broadcast_buffer_size": 10000,
+            "subscriber_buffer_size": 10000
+    }
+}

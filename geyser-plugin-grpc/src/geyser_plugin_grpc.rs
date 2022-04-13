@@ -1,21 +1,15 @@
 use {
-    crate::accounts_selector::AccountsSelector,
-    bs58,
     geyser_proto::{
-        slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
-        SlotUpdate, SubscribeRequest, SubscribeResponse, Update,
+        update::UpdateOneof, Ping, SubscribeRequest, SubscribeResponse, Update, Transaction
     },
     log::*,
     serde_derive::Deserialize,
     serde_json,
     solana_geyser_plugin_interface::geyser_plugin_interface::{
-        GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, Result as PluginResult,
-        SlotStatus,
+        GeyserPlugin, GeyserPluginError, Result as PluginResult,
+        ReplicaTransactionInfoVersions
     },
-    std::collections::HashSet,
-    std::convert::TryInto,
     std::sync::atomic::{AtomicU64, Ordering},
-    std::sync::RwLock,
     std::{fs::File, io::Read, sync::Arc},
     tokio::sync::{broadcast, mpsc},
     tonic::transport::Server,
@@ -103,16 +97,6 @@ pub struct PluginData {
     runtime: Option<tokio::runtime::Runtime>,
     server_broadcast: broadcast::Sender<Update>,
     server_exit_sender: Option<broadcast::Sender<()>>,
-    accounts_selector: AccountsSelector,
-
-    /// Largest slot that an account write was processed for
-    highest_write_slot: Arc<AtomicU64>,
-
-    /// Accounts that saw account writes
-    ///
-    /// Needed to catch writes that signal account closure, where
-    /// lamports=0 and owner=system-program.
-    active_accounts: RwLock<HashSet<[u8; 32]>>,
 }
 
 #[derive(Default)]
@@ -158,9 +142,6 @@ impl GeyserPlugin for Plugin {
         let mut file = File::open(config_file)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-
-        let result: serde_json::Value = serde_json::from_str(&contents).unwrap();
-        let accounts_selector = Self::create_accounts_selector_from_config(&result);
 
         let config: PluginConfig = serde_json::from_str(&contents).map_err(|err| {
             GeyserPluginError::ConfigFileReadError {
@@ -213,9 +194,6 @@ impl GeyserPlugin for Plugin {
             runtime: Some(runtime),
             server_broadcast,
             server_exit_sender: Some(server_exit_sender),
-            accounts_selector,
-            highest_write_slot,
-            active_accounts: RwLock::new(HashSet::new()),
         });
 
         Ok(())
@@ -237,128 +215,38 @@ impl GeyserPlugin for Plugin {
             .shutdown_background();
     }
 
-    fn update_account(
-        &mut self,
-        account: ReplicaAccountInfoVersions,
-        slot: u64,
-        is_startup: bool,
-    ) -> PluginResult<()> {
+
+    fn notify_transaction(&mut self, transaction: ReplicaTransactionInfoVersions, _slot: u64) -> PluginResult<()> {
         let data = self.data.as_ref().expect("plugin must be initialized");
-        match account {
-            ReplicaAccountInfoVersions::V0_0_1(account) => {
-                if account.pubkey.len() != 32 {
-                    error!(
-                        "bad account pubkey length: {}",
-                        bs58::encode(account.pubkey).into_string()
-                    );
-                    return Ok(());
-                }
+        match transaction {
+            ReplicaTransactionInfoVersions::V0_0_1(transaction) => {
+                let signature = *transaction.signature;
+                let sig_bytes: [u8; 64] = signature.into();
 
-                // Select only accounts configured to look at, plus writes to accounts
-                // that were previously selected (to catch closures and account reuse)
-                let is_selected = data
-                    .accounts_selector
-                    .is_account_selected(account.pubkey, account.owner);
-                let previously_selected = {
-                    let read = data.active_accounts.read().unwrap();
-                    read.contains(&account.pubkey[0..32])
-                };
-                if !is_selected && !previously_selected {
-                    return Ok(());
-                }
-
-                // If the account is newly selected, add it
-                if !previously_selected {
-                    let mut write = data.active_accounts.write().unwrap();
-                    write.insert(account.pubkey.try_into().unwrap());
-                }
-
-                data.highest_write_slot.fetch_max(slot, Ordering::SeqCst);
-
-                debug!(
-                    "Updating account {:?} with owner {:?} at slot {:?}",
-                    bs58::encode(account.pubkey).into_string(),
-                    bs58::encode(account.owner).into_string(),
-                    slot,
-                );
-
-                data.broadcast(UpdateOneof::AccountWrite(AccountWrite {
-                    slot,
-                    is_startup,
-                    write_version: account.write_version,
-                    pubkey: account.pubkey.to_vec(),
-                    lamports: account.lamports,
-                    owner: account.owner.to_vec(),
-                    executable: account.executable,
-                    rent_epoch: account.rent_epoch,
-                    data: account.data.to_vec(),
-                    is_selected,
+                data.broadcast(UpdateOneof::Transaction(Transaction {
+                    signature: sig_bytes.to_vec(),
+                    is_vote: transaction.is_vote,
                 }));
             }
         }
         Ok(())
     }
 
-    fn update_slot_status(
-        &mut self,
-        slot: u64,
-        parent: Option<u64>,
-        status: SlotStatus,
-    ) -> PluginResult<()> {
-        let data = self.data.as_ref().expect("plugin must be initialized");
-        debug!("Updating slot {:?} at with status {:?}", slot, status);
-
-        let status = match status {
-            SlotStatus::Processed => SlotUpdateStatus::Processed,
-            SlotStatus::Confirmed => SlotUpdateStatus::Confirmed,
-            SlotStatus::Rooted => SlotUpdateStatus::Rooted,
-        };
-        data.broadcast(UpdateOneof::SlotUpdate(SlotUpdate {
-            slot,
-            parent,
-            status: status as i32,
-        }));
-
+    fn notify_end_of_startup(&mut self) -> PluginResult<()> {
         Ok(())
     }
 
-    fn notify_end_of_startup(&mut self) -> PluginResult<()> {
-        Ok(())
+    fn account_data_notifications_enabled(&self) -> bool {
+        false
+    }
+
+    fn transaction_notifications_enabled(&self) -> bool {
+        true
     }
 }
 
 impl Plugin {
-    fn create_accounts_selector_from_config(config: &serde_json::Value) -> AccountsSelector {
-        let accounts_selector = &config["accounts_selector"];
 
-        if accounts_selector.is_null() {
-            AccountsSelector::default()
-        } else {
-            let accounts = &accounts_selector["accounts"];
-            let accounts: Vec<String> = if accounts.is_array() {
-                accounts
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|val| val.as_str().unwrap().to_string())
-                    .collect()
-            } else {
-                Vec::default()
-            };
-            let owners = &accounts_selector["owners"];
-            let owners: Vec<String> = if owners.is_array() {
-                owners
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|val| val.as_str().unwrap().to_string())
-                    .collect()
-            } else {
-                Vec::default()
-            };
-            AccountsSelector::new(&accounts, &owners)
-        }
-    }
 }
 
 #[no_mangle]
@@ -370,19 +258,4 @@ pub unsafe extern "C" fn _create_plugin() -> *mut dyn GeyserPlugin {
     let plugin = Plugin::default();
     let plugin: Box<dyn GeyserPlugin> = Box::new(plugin);
     Box::into_raw(plugin)
-}
-
-#[cfg(test)]
-pub(crate) mod tests {
-    use {super::*, serde_json};
-
-    #[test]
-    fn test_accounts_selector_from_config() {
-        let config = "{\"accounts_selector\" : { \
-           \"owners\" : [\"9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin\"] \
-        }}";
-
-        let config: serde_json::Value = serde_json::from_str(config).unwrap();
-        Plugin::create_accounts_selector_from_config(&config);
-    }
 }

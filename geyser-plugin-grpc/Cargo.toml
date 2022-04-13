@@ -33,6 +33,9 @@ tokio-stream = "0.1"
 async-stream = "0.2"
 rand = "0.8"
 
+nats = "0.18"
+smol = "1.2.5"
+
 [build-dependencies]
 tonic-build = "0.6"
 

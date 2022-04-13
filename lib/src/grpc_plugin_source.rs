@@ -196,6 +196,7 @@ async fn feed_data_geyser(
                         write_version_mapping.slot += 1;
                     },
                     geyser_proto::update::UpdateOneof::Ping(_) => {},
+                    geyser_proto::update::UpdateOneof::Transaction(_) => {},
                 }
                 sender.send(Message::GrpcUpdate(update)).await.expect("send success");
             },
@@ -378,6 +379,7 @@ pub async fn process_events(
                     }
                     geyser_proto::update::UpdateOneof::Ping(_) => {}
                     geyser_proto::update::UpdateOneof::SubscribeResponse(_) => {}
+                    geyser_proto::update::UpdateOneof::Transaction(_) => {}
                 }
             }
             Message::Snapshot(update) => {

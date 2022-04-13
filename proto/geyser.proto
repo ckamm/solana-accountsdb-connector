@@ -19,6 +19,7 @@ message Update {
     SlotUpdate slot_update = 2;
     Ping ping = 3;
     SubscribeResponse subscribe_response = 4;
+    Transaction transaction = 5;
   }
 }
 
@@ -55,4 +56,9 @@ message Ping {
 
 message SubscribeResponse {
   uint64 highest_write_slot = 1;
+}
+
+message Transaction {
+  bytes signature = 1;
+  bool is_vote = 2;
 }
