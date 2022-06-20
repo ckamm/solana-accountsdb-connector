@@ -42,6 +42,7 @@ async fn get_snapshot(
         encoding: Some(UiAccountEncoding::Base64),
         commitment: Some(CommitmentConfig::finalized()),
         data_slice: None,
+        min_context_slot: None,
     };
     let program_accounts_config = RpcProgramAccountsConfig {
         filters: None,

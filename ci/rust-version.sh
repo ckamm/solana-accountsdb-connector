@@ -23,7 +23,7 @@
 if [[ -n $RUST_STABLE_VERSION ]]; then
   stable_version="$RUST_STABLE_VERSION"
 else
-  stable_version=1.57.0
+  stable_version=1.59.0
 fi
 
 if [[ -n $RUST_NIGHTLY_VERSION ]]; then
@@ -91,7 +91,7 @@ export rust_nightly_docker_image=solanalabs/rust-nightly:"$nightly_version"
 if [[ -n $RUST_STABLE_VERSION ]]; then
   stable_version="$RUST_STABLE_VERSION"
 else
-  stable_version=1.57.0
+  stable_version=1.59.0
 fi
 
 if [[ -n $RUST_NIGHTLY_VERSION ]]; then
