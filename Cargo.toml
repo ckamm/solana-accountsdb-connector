@@ -3,8 +3,8 @@ members = [
         "geyser-plugin-grpc",
         "lib",
         "connector-raw",
-        "connector-mango",
-        "mango-pnl-service",
+#        "connector-mango",
+#        "mango-pnl-service",
 ]
 
 
