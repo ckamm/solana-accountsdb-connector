@@ -24,7 +24,7 @@ solana-logger = "=1.10.25"
 solana-metrics = "=1.10.25"
 solana-sdk = "=1.10.25"
 
-tonic = "0.6"
+tonic = { version = "0.6", features = ["compression"] }
 prost = "0.9"
 futures-core = "0.3"
 futures-util = "0.3"
@@ -35,7 +35,7 @@ async-stream = "0.2"
 rand = "0.8"
 
 [build-dependencies]
-tonic-build = "0.6"
+tonic-build = { version = "0.6", features = ["compression"] }
 
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]

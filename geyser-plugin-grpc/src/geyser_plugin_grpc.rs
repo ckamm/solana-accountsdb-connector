@@ -182,10 +182,13 @@ impl GeyserPlugin for Plugin {
         let highest_write_slot = Arc::new(AtomicU64::new(0));
         let service =
             geyser_service::Service::new(config.service_config, highest_write_slot.clone());
+
         let (server_exit_sender, mut server_exit_receiver) = broadcast::channel::<()>(1);
         let server_broadcast = service.sender.clone();
 
-        let server = geyser_proto::accounts_db_server::AccountsDbServer::new(service);
+        let server = geyser_proto::accounts_db_server::AccountsDbServer::new(service)
+              .accept_gzip()
+              .send_gzip();
         let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.spawn(Server::builder().add_service(server).serve_with_shutdown(
             addr,
