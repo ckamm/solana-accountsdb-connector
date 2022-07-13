@@ -2,9 +2,7 @@ use std::io::{Read, Write};
 
 pub fn zstd_compress(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), 0).unwrap();
-
     encoder.write_all(data)?;
-
     encoder.finish()
 }
 
@@ -17,15 +15,17 @@ pub(crate) mod tests {
     use super::*;
     #[test]
     fn test_zstd_compression() {
-        let data = vec![100; 256];
+        let data = vec![100; 256]; //sample data, 256 bytes of val 100.
         println!("Uncompressed Data = {:?}", data);
+
         match zstd_compress(&data) {
             Ok(compressed) => {
                 println!("Compressed Data = {:?}\n", compressed);
 
                 let mut uncompressed: Vec<u8> = Vec::new();
+
                 match zstd_decompress(&compressed, &mut uncompressed) {
-                    Ok(res) => {
+                    Ok(_) => {
                         println!("Uncompressed Data = {:?}\n", uncompressed);
                     }
                     Err(e) => {
