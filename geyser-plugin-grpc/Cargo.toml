@@ -33,7 +33,8 @@ tokio-stream = "0.1"
 
 async-stream = "0.2"
 rand = "0.8"
-
+zstd = "0.11.2"
+zstd-safe = "5.0.2"
 [build-dependencies]
 tonic-build = { version = "0.6", features = ["compression"] }
 
