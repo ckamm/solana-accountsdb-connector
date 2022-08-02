@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 solana-geyser-connector-lib = { path = "../lib" }
-solana-logger = "=1.10.31"
+solana-logger = "=1.10.32"
 log = "0.4"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
