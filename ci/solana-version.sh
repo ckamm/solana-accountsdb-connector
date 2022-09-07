@@ -6,4 +6,4 @@ set -e
 
 cd "$(dirname "$0")/.."
 
-cargo read-manifest | jq -r '.dependencies[] | select(.name == "solana-geyser-plugin-interface") | .req'
+grep solana-geyser-plugin-interface crates/plugin/Cargo.toml | cut -d ' ' -f3 | sed  's/\"/ /g;s/=//;s/ //'
