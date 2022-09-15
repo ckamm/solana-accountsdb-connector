@@ -146,6 +146,7 @@ pub fn encode_address(addr: &Pubkey) -> String {
     bs58::encode(&addr.to_bytes()).into_string()
 }
 
+
 #[async_trait]
 impl AccountTable for RawAccountTable {
     fn table_name(&self) -> &str {
@@ -165,23 +166,22 @@ impl AccountTable for RawAccountTable {
         let rent_epoch = account_write.rent_epoch as i64;
 
         // TODO: should update for same write_version to work with websocket input
-        let query = postgres_query::query!(
+        let query = query!(
             "INSERT INTO account_write
-            (pubkey_id, slot, write_version, is_selected,
-             owner_id, lamports, executable, rent_epoch, data)
-            VALUES
-            (map_pubkey($pubkey), $slot, $write_version, $is_selected,
-             map_pubkey($owner), $lamports, $executable, $rent_epoch, $data)
-            ON CONFLICT (pubkey_id, slot, write_version) DO NOTHING",
+                    (pubkey, slot, is_selected,
+                    owner, lamports, executable, rent_epoch, data)
+                VALUES
+                ($pubkey, $slot, $is_selected,
+                $owner, $lamports, $executable, $rent_epoch, $data)
+                ON CONFLICT (pubkey_id, slot) DO UPDATE",
             pubkey,
             slot,
-            write_version,
-            is_selected = account_write.is_selected,
+            is_selected,
             owner,
             lamports,
-            executable = account_write.executable,
+            executable,
             rent_epoch,
-            data = account_write.data,
+            data,
         );
         let _ = query.execute(client).await?;
         Ok(())
