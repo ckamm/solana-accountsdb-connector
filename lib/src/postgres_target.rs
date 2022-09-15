@@ -457,8 +457,6 @@ pub async fn init(
         });
     }
 
-    
-
     // postgres metrics/monitoring thread
     {
         let postgres_con =
