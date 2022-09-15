@@ -2,7 +2,7 @@ use anyhow::Context;
 use log::*;
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
-use postgres_query::{query, query_dyn};
+use postgres_query::query;
 use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
 use crate::{metrics, AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};

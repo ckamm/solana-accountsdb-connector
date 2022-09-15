@@ -160,9 +160,11 @@ impl AccountTable for RawAccountTable {
         let pubkey = encode_address(&account_write.pubkey);
         let owner = encode_address(&account_write.owner);
         let slot = account_write.slot as i64;
-        let write_version = account_write.write_version as i64;
         let lamports = account_write.lamports as i64;
         let rent_epoch = account_write.rent_epoch as i64;
+        let data = &account_write.data;
+        let executable = account_write.executable;
+        let is_selected = account_write.is_selected;
 
         // TODO: should update for same write_version to work with websocket input
         let query = postgres_query::query!(
