@@ -146,7 +146,6 @@ pub fn encode_address(addr: &Pubkey) -> String {
     bs58::encode(&addr.to_bytes()).into_string()
 }
 
-
 #[async_trait]
 impl AccountTable for RawAccountTable {
     fn table_name(&self) -> &str {

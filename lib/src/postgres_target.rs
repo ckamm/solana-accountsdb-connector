@@ -187,7 +187,6 @@ impl Slots {
     }
 }
 
-
 #[derive(Clone)]
 struct SlotsProcessing {}
 
