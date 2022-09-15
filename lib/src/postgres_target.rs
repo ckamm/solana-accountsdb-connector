@@ -457,43 +457,7 @@ pub async fn init(
         });
     }
 
-    // postgres cleanup thread
-    if config.cleanup_interval_secs > 0 {
-        let table_names: Vec<String> = account_tables
-            .iter()
-            .map(|table| table.table_name().to_string())
-            .collect();
-        let cleanup_steps = make_cleanup_steps(&table_names);
-
-        let postgres_con =
-            postgres_connection(config, metric_con_retries.clone(), metric_con_live.clone())
-                .await?;
-        let mut metric_last_cleanup =
-            metrics_sender.register_u64("postgres_cleanup_last_success_timestamp".into());
-        let mut metric_cleanup_errors =
-            metrics_sender.register_u64("postgres_cleanup_errors".into());
-        let config = config.clone();
-        tokio::spawn(async move {
-            let mut client_opt = None;
-            loop {
-                tokio::time::sleep(Duration::from_secs(config.cleanup_interval_secs)).await;
-                let client = update_postgres_client(&mut client_opt, &postgres_con, &config).await;
-
-                let mut all_successful = true;
-                for (name, cleanup_sql) in &cleanup_steps {
-                    let query = query_dyn!(&cleanup_sql).unwrap();
-                    if let Err(err) = query.execute(client).await {
-                        warn!("failed to process cleanup step {}: {:?}", name, err);
-                        metric_cleanup_errors.increment();
-                        all_successful = false;
-                    }
-                }
-                if all_successful {
-                    metric_last_cleanup.set_max(secs_since_epoch());
-                }
-            }
-        });
-    }
+    
 
     // postgres metrics/monitoring thread
     {

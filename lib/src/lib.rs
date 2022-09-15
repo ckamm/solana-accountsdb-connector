@@ -165,7 +165,7 @@ impl AccountTable for RawAccountTable {
         let rent_epoch = account_write.rent_epoch as i64;
 
         // TODO: should update for same write_version to work with websocket input
-        let query = query!(
+        let query = postgres_query::query!(
             "INSERT INTO account_write
                     (pubkey, slot, is_selected,
                     owner, lamports, executable, rent_epoch, data)
