@@ -130,6 +130,10 @@ impl SlotsProcessing {
     ) -> anyhow::Result<()> {
         let slot_no = update.slot as i64;
         let status: pg::SlotStatus = update.status.into();
+        let parent = match update.parent {
+            Some(parent) => parent as i64,
+            None => 0,
+        };
 
         match status {
             pg::SlotStatus::Processed => {
@@ -137,9 +141,10 @@ impl SlotsProcessing {
 
                 let query = query!(
                     "BEGIN TRANSACTION
-                    INSERT INTO slot(slot, status) VALUES($slot_no, $status);
+                    INSERT INTO slot(slot, parent, status) VALUES($slot_no, $parent, $status);
                     END TRANSACTION",
                     slot_no,
+                    parent,
                     status,
                 );
 
