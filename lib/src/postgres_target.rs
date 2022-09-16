@@ -199,77 +199,34 @@ impl SlotsProcessing {
         &self,
         client: &postgres_query::Caching<tokio_postgres::Client>,
         update: &SlotUpdate,
-        meta: &SlotPreprocessing,
     ) -> anyhow::Result<()> {
-        let slot = update.slot as i64;
+        let slot_no = update.slot as i64;
         let status: pg::SlotStatus = update.status.into();
-        if let Some(parent) = update.parent {
-            let parent = parent as i64;
-            let query = query!(
-                "INSERT INTO slot
-                    (slot, parent, status, uncle)
-                VALUES
-                    ($slot, $parent, $status, FALSE)
-                ON CONFLICT (slot) DO UPDATE SET
-                    parent=$parent, status=$status",
-                slot,
-                parent,
-                status,
+
+        if status == pg::SlotStatus::Processed {
+            let query =  query!(
+                "BEGIN TRANSACTION
+                UPDATE slots SET status = 'confirmed' WHERE slot =  $slot_no
+                DELETE FROM account_write WHERE slot IN (SELECT slot FROM slots WHERE slot < $slot_no AND status = 'processed') 
+                DELETE FROM slots WHERE slot < $slot_no AND status = 'processed'
+                END TRANSACTION",
+                slot_no
             );
-            let _ = query.execute(client).await.context("updating slot row")?;
-        } else {
-            let query = query!(
-                "INSERT INTO slot
-                    (slot, parent, status, uncle)
-                VALUES
-                    ($slot, NULL, $status, FALSE)
-                ON CONFLICT (slot) DO UPDATE SET
-                    status=$status",
-                slot,
-                status,
-            );
-            let _ = query.execute(client).await.context("updating slot row")?;
+
+            query.execute(client).await.context("updating slot row")?;
         }
 
-        if meta.new_rooted_head {
-            let slot = update.slot as i64;
-            // Mark preceeding non-uncle slots as rooted
+        if status == pg::SlotStatus::Rooted {
             let query = query!(
-                "UPDATE slot SET status = 'Rooted'
-                WHERE slot < $newest_final_slot
-                AND (NOT uncle)
-                AND status != 'Rooted'",
-                newest_final_slot = slot
+                "BEGIN TRANSACTION
+                UPDATE slots SET status = 'finalized' WHERE slot = $slot_no
+                DELETE FROM account_write WHERE slot IN (SELECT slots FROM slot < $slot_no AND status = 'confirmed') 
+                DELETE FROM slot WHERE slot < $slot_no AND commitment = 'confirmed'
+                END TRANSACTION",
+                slot_no
             );
-            let _ = query
-                .execute(client)
-                .await
-                .context("updating preceding non-rooted slots")?;
-        }
 
-        if meta.new_processed_head || meta.parent_update {
-            // update the uncle column for the chain of slots from the
-            // newest down the the first rooted slot
-            let query = query!(
-                "WITH RECURSIVE
-                    liveslots AS (
-                        SELECT slot.*, 0 AS depth FROM slot
-                            WHERE slot = (SELECT max(slot) FROM slot)
-                        UNION ALL
-                        SELECT s.*, depth + 1 FROM slot s
-                            INNER JOIN liveslots l ON s.slot = l.parent
-                            WHERE l.status != 'Rooted' AND depth < 1000
-                    ),
-                    min_slot AS (SELECT min(slot) AS min_slot FROM liveslots)
-                UPDATE slot SET
-                    uncle = NOT EXISTS (SELECT 1 FROM liveslots WHERE liveslots.slot = slot.slot)
-                    FROM min_slot
-                    WHERE slot >= min_slot;"
-            );
-            let _ = query
-                .execute(client)
-                .await
-                .context("recomputing slot uncle status")?;
+            query.execute(client).await.context("updating slot row")?;
         }
 
         trace!("slot update done {}", update.slot);
@@ -426,7 +383,7 @@ pub async fn init(
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
-                let (update, preprocessing) =
+                let (update, _preprocessing) =
                     receiver_c.recv().await.expect("sender must stay alive");
                 trace!("slot insertion, slot {}", update.slot);
 
@@ -434,10 +391,7 @@ pub async fn init(
                 loop {
                     let client =
                         update_postgres_client(&mut client_opt, &postgres_slot, &config).await;
-                    if let Err(err) = slots_processing
-                        .process(client, &update, &preprocessing)
-                        .await
-                    {
+                    if let Err(err) = slots_processing.process(client, &update).await {
                         metric_retries.increment();
                         error_count += 1;
                         if error_count - 1 < config.retry_query_max_count {
