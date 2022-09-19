@@ -51,19 +51,18 @@ $func$;
 
 -- The table storing account writes, keeping only the newest write_version per slot
 CREATE TABLE account_write (
-    pubkey_id BIGINT NOT NULL REFERENCES pubkey,
+    pubkey VARCHAR NOT NULL,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
     is_selected BOOL NOT NULL,
-    owner_id BIGINT REFERENCES pubkey,
     lamports BIGINT NOT NULL,
     executable BOOL NOT NULL,
     rent_epoch BIGINT NOT NULL,
     data BYTEA,
-    PRIMARY KEY (pubkey_id, slot, write_version)
+    PRIMARY KEY (pubkey, slot)
 );
-CREATE INDEX account_write_searchkey on account_write(pubkey_id, slot DESC, write_version DESC);
-CREATE INDEX account_write_pubkey_id_idx on account_write(pubkey_id);
+CREATE INDEX account_write_searchkey on account_write(pubkey, slot DESC, write_version DESC);
+CREATE INDEX account_write_pubkey_id_idx on account_write(pubkey);
 
 -- The table storing slot information
 CREATE TABLE slot (
