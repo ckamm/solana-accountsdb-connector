@@ -27,6 +27,7 @@ CREATE TABLE account_write (
     pubkey VARCHAR NOT NULL,
     slot BIGINT NOT NULL,
     write_version BIGINT NOT NULL,
+    owner VARCHAR NOT NULL,
     is_selected BOOL NOT NULL,
     lamports BIGINT NOT NULL,
     executable BOOL NOT NULL,
