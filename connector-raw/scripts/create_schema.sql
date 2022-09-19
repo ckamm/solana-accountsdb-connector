@@ -22,33 +22,6 @@ CREATE TABLE pubkey (
     pubkey VARCHAR(44) NOT NULL UNIQUE
 );
 
--- Returns a pubkey_id for a pubkey, by getting it from the table or inserting it.
--- Getting this fully correct is complex, see:
--- https://stackoverflow.com/questions/15939902/is-select-or-insert-in-a-function-prone-to-race-conditions/15950324
--- and currently this function assumes there are no deletions in the pubkey table!
-CREATE OR REPLACE FUNCTION map_pubkey(_pubkey varchar(44), OUT _pubkey_id bigint)
-  LANGUAGE plpgsql AS
-$func$
-BEGIN
-   LOOP
-      SELECT pubkey_id
-      FROM   pubkey
-      WHERE  pubkey = _pubkey
-      INTO   _pubkey_id;
-
-      EXIT WHEN FOUND;
-
-      INSERT INTO pubkey AS t
-      (pubkey) VALUES (_pubkey)
-      ON     CONFLICT (pubkey) DO NOTHING
-      RETURNING t.pubkey_id
-      INTO   _pubkey_id;
-
-      EXIT WHEN FOUND;
-   END LOOP;
-END
-$func$;
-
 -- The table storing account writes, keeping only the newest write_version per slot
 CREATE TABLE account_write (
     pubkey VARCHAR NOT NULL,
