@@ -3,7 +3,7 @@ use log::*;
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
 use postgres_query::query;
-use std::{convert::TryFrom, time::Duration};
+use std::{collections::HashMap, convert::TryFrom, time::Duration};
 
 use crate::{metrics, AccountTables, AccountWrite, PostgresConfig, SlotStatus, SlotUpdate};
 
@@ -115,6 +115,78 @@ async fn process_account_write(
     Ok(())
 }
 
+struct Slots {
+    // non-rooted only
+    slots: HashMap<u64, SlotUpdate>,
+    newest_processed_slot: Option<u64>,
+    newest_rooted_slot: Option<u64>,
+}
+
+#[derive(Default)]
+struct SlotPreprocessing {
+    discard_duplicate: bool,
+    discard_old: bool,
+    new_processed_head: bool,
+    new_rooted_head: bool,
+    parent_update: bool,
+}
+
+impl Slots {
+    fn new() -> Self {
+        Self {
+            slots: HashMap::new(),
+            newest_processed_slot: None,
+            newest_rooted_slot: None,
+        }
+    }
+
+    fn add(&mut self, update: &SlotUpdate) -> SlotPreprocessing {
+        let mut result = SlotPreprocessing::default();
+
+        if let Some(previous) = self.slots.get_mut(&update.slot) {
+            if previous.status == update.status && previous.parent == update.parent {
+                result.discard_duplicate = true;
+            }
+
+            previous.status = update.status;
+            if update.parent.is_some() && previous.parent != update.parent {
+                previous.parent = update.parent;
+                result.parent_update = true;
+            }
+        } else if self.newest_rooted_slot.is_none()
+            || update.slot > self.newest_rooted_slot.unwrap()
+        {
+            self.slots.insert(update.slot, update.clone());
+        } else {
+            result.discard_old = true;
+        }
+
+        if update.status == SlotStatus::Rooted {
+            let old_slots: Vec<u64> = self
+                .slots
+                .keys()
+                .filter(|s| **s <= update.slot)
+                .copied()
+                .collect();
+            for old_slot in old_slots {
+                self.slots.remove(&old_slot);
+            }
+            if self.newest_rooted_slot.is_none() || self.newest_rooted_slot.unwrap() < update.slot {
+                self.newest_rooted_slot = Some(update.slot);
+                result.new_rooted_head = true;
+            }
+        }
+
+        if self.newest_processed_slot.is_none() || self.newest_processed_slot.unwrap() < update.slot
+        {
+            self.newest_processed_slot = Some(update.slot);
+            result.new_processed_head = true;
+        }
+
+        result
+    }
+}
+
 #[derive(Clone)]
 struct SlotsProcessing {}
 
@@ -153,8 +225,8 @@ impl SlotsProcessing {
             pg::SlotStatus::Confirmed => {
                 let query = query!(
                     "BEGIN TRANSACTION
-                    UPDATE slots SET status = 'confirmed' WHERE slot =  $slot_no
-                    DELETE FROM account_write WHERE slot IN (SELECT slot FROM slots WHERE slot < $slot_no AND status = 'processed') 
+                    UPDATE slot SET status = 'confirmed' WHERE slot =  $slot_no
+                    DELETE FROM account_write WHERE slot IN (SELECT slot FROM slot WHERE slot < $slot_no AND status = 'processed') 
                     DELETE FROM slots WHERE slot < $slot_no AND status = 'processed'
                     END TRANSACTION",
                     slot_no
@@ -165,8 +237,8 @@ impl SlotsProcessing {
             pg::SlotStatus::Rooted => {
                 let query = query!(
                 "BEGIN TRANSACTION
-                UPDATE slots SET status = 'finalized' WHERE slot = $slot_no
-                DELETE FROM account_write WHERE slot IN (SELECT slots FROM slot < $slot_no AND status = 'confirmed') 
+                UPDATE slot SET status = 'finalized' WHERE slot = $slot_no
+                DELETE FROM account_write WHERE slot IN (SELECT slot FROM slot < $slot_no AND status = 'confirmed') 
                 DELETE FROM slot WHERE slot < $slot_no AND commitment = 'confirmed'
                 END TRANSACTION",
                 slot_no
@@ -203,8 +275,11 @@ pub async fn init(
     let (account_write_queue_sender, account_write_queue_receiver) =
         async_channel::bounded::<AccountWrite>(config.account_write_max_queue_size);
 
-    let (slot_queue_sender, _slot_queue_receiver) = async_channel::unbounded::<SlotUpdate>();
-    let (_slot_inserter_sender, slot_inserter_receiver) = async_channel::unbounded::<SlotUpdate>();
+    // Slot updates flowing from the outside into the single processing thread. From
+    // there they'll flow into the postgres sending thread.
+    let (slot_queue_sender, slot_queue_receiver) = async_channel::unbounded::<SlotUpdate>();
+    let (slot_inserter_sender, slot_inserter_receiver) =
+        async_channel::unbounded::<(SlotUpdate, SlotPreprocessing)>();
 
     let metric_con_retries = metrics_sender.register_u64("postgres_connection_retries".into());
     let metric_con_live = metrics_sender.register_u64("postgres_connections_alive".into());
@@ -256,7 +331,7 @@ pub async fn init(
                     let mut results = futures::future::join_all(
                         write_batch
                             .iter()
-                            .map(|write| process_account_write(client, write, &account_tables_c)),
+                            .map(|write| process_account_write(client, &write, &account_tables_c)),
                     )
                     .await;
                     let mut iter = results.iter();
@@ -282,6 +357,36 @@ pub async fn init(
         });
     }
 
+    // slot update handling thread
+    let mut metric_slot_queue = metrics_sender.register_u64("slot_insert_queue".into());
+    tokio::spawn(async move {
+        let mut slots = Slots::new();
+
+        loop {
+            let update = slot_queue_receiver
+                .recv()
+                .await
+                .expect("sender must stay alive");
+            trace!(
+                "slot update {}, channel size {}",
+                update.slot,
+                slot_queue_receiver.len()
+            );
+
+            // Check if we already know about the slot, or it is outdated
+            let slot_preprocessing = slots.add(&update);
+            if slot_preprocessing.discard_duplicate || slot_preprocessing.discard_old {
+                continue;
+            }
+
+            slot_inserter_sender
+                .send((update, slot_preprocessing))
+                .await
+                .expect("sending must succeed");
+            metric_slot_queue.set(slot_inserter_sender.len() as u64);
+        }
+    });
+
     // postgres slot update worker threads
     let slots_processing = SlotsProcessing::new();
     for _ in 0..config.slot_update_connection_count {
@@ -297,7 +402,8 @@ pub async fn init(
         tokio::spawn(async move {
             let mut client_opt = None;
             loop {
-                let update = receiver_c.recv().await.expect("sender must stay alive");
+                let (update, _preprocessing) =
+                    receiver_c.recv().await.expect("sender must stay alive");
                 trace!("slot insertion, slot {}", update.slot);
 
                 let mut error_count = 0;
