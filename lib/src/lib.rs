@@ -174,7 +174,7 @@ impl AccountTable for RawAccountTable {
                 VALUES
                 ($pubkey, $slot, $is_selected,
                 $owner, $lamports, $executable, $rent_epoch, $data)
-                ON CONFLICT (pubkey_id, slot) DO UPDATE",
+                ON CONFLICT (pubkey, slot) DO UPDATE",
             pubkey,
             slot,
             is_selected,
