@@ -4725,6 +4725,7 @@ dependencies = [
  "tokio-stream",
  "tonic 0.6.2",
  "tonic-build 0.6.2",
+ "tracing",
 ]
 
 [[package]]

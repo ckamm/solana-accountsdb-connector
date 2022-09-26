@@ -190,7 +190,16 @@ impl AccountTable for RawAccountTable {
             data,
             write_version
         );
-        let _ = query.execute(client).await?;
+
+        match query.execute(client).await {
+            Ok(_) => (),
+            Err(error) => {
+                tracing::error!("Error executing `INSERT QUERY`. Error `{:?}` ", error);
+
+                return Err(anyhow::Error::new(error));
+            }
+        }
+
         Ok(())
     }
 }

@@ -220,7 +220,9 @@ impl SlotsProcessing {
                     status,
                 );
 
-                query.execute(client).await.context("updating slot row")?;
+                let exec_query = query.execute(client).await;
+
+                exec_ok_or_err(exec_query)?;
             }
             pg::SlotStatus::Confirmed => {
                 let query = query!(
@@ -231,8 +233,9 @@ impl SlotsProcessing {
                     END TRANSACTION",
                     slot_no
                 );
+                let exec_query = query.execute(client).await;
 
-                query.execute(client).await.context("updating slot row")?;
+                exec_ok_or_err(exec_query)?;
             }
             pg::SlotStatus::Rooted => {
                 let query = query!(
@@ -244,12 +247,26 @@ impl SlotsProcessing {
                 slot_no
             );
 
-                query.execute(client).await.context("updating slot row")?;
+                let exec_query = query.execute(client).await;
+                exec_ok_or_err(exec_query)?;
             }
         }
 
         trace!("slot update done {}", update.slot);
         Ok(())
+    }
+}
+
+ fn exec_ok_or_err(
+    exec_result: Result<u64, postgres_query::Error>) -> Result<u64, postgres_query::Error> {
+
+    match exec_result {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            tracing::error!("Encountered error while updating slot. Error `{:?}`", error);
+
+            return Err(error);
+        }
     }
 }
 
