@@ -42,7 +42,6 @@ CREATE INDEX account_write_pubkey_id_idx on account_write(pubkey);
 CREATE TABLE slot (
     slot BIGINT PRIMARY KEY,
     parent BIGINT,
-    status "SlotStatus" NOT NULL,
-    uncle BOOL NOT NULL
+    status "SlotStatus" NOT NULL
 );
 CREATE INDEX ON slot (parent);
