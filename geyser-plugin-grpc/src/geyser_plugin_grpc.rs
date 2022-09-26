@@ -2,7 +2,6 @@ use crate::compression::zstd_compress;
 
 use {
     crate::accounts_selector::AccountsSelector,
-    crate::compression,
     bs58,
     geyser_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,

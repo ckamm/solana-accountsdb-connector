@@ -165,16 +165,21 @@ impl AccountTable for RawAccountTable {
         let data = &account_write.data;
         let executable = account_write.executable;
         let is_selected = account_write.is_selected;
+        let write_version = account_write.write_version as i64;
 
         // TODO: should update for same write_version to work with websocket input
         let query = postgres_query::query!(
             "INSERT INTO account_write
                     (pubkey, slot, is_selected,
-                    owner, lamports, executable, rent_epoch, data)
+                    owner, lamports, executable, rent_epoch, data, write_version)
                 VALUES
                 ($pubkey, $slot, $is_selected,
-                $owner, $lamports, $executable, $rent_epoch, $data)
-                ON CONFLICT (pubkey, slot) DO UPDATE",
+                $owner, $lamports, $executable, $rent_epoch, $data, $write_version)
+                ON CONFLICT (pubkey, slot) DO UPDATE ON CONFLICT (pubkey, slot) 
+                DO UPDATE SET 
+                    $is_selected = is_selected, $owner = owner, $lamports = lamports, 
+                    $executable = executable , $rent_epoch = rent_epoch, 
+                    $data = data, $write_version= write_version",
             pubkey,
             slot,
             is_selected,
@@ -183,6 +188,7 @@ impl AccountTable for RawAccountTable {
             executable,
             rent_epoch,
             data,
+            write_version
         );
         let _ = query.execute(client).await?;
         Ok(())
