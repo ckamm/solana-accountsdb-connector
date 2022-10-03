@@ -213,7 +213,7 @@ impl SlotsProcessing {
 
                 let query = query!(
                     "BEGIN TRANSACTION
-                    INSERT INTO slot(slot, parent, status) VALUES($slot_no, $parent, $status);
+                    INSERT INTO slot(slot, parent, status) VALUES($slot_no, $parent, $status)
                     END TRANSACTION",
                     slot_no,
                     parent,
