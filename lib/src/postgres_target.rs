@@ -197,7 +197,7 @@ impl SlotsProcessing {
 
     async fn process(
         &self,
-        client: &postgres_query::Caching<tokio_postgres::Client>,
+        client: &mut postgres_query::Caching<tokio_postgres::Client>,
         update: &SlotUpdate,
     ) -> anyhow::Result<()> {
         let slot_no = update.slot as i64;
@@ -211,44 +211,29 @@ impl SlotsProcessing {
             pg::SlotStatus::Processed => {
                 let status = "Processed";
 
-                let query = query!(
-                    "BEGIN TRANSACTION
-                    INSERT INTO slot(slot, parent, status) VALUES($slot_no, $parent, $status)
-                    END TRANSACTION",
-                    slot_no,
-                    parent,
-                    status,
-                );
+                let tx = client.transaction().await.unwrap();
 
-                let exec_query = query.execute(client).await;
+                tx.query("INSERT INTO slot(slot, parent, status) VALUES($1, $2, $3)", &[&slot_no, &parent, &status]).await.unwrap();
 
-                exec_ok_or_err(exec_query)?;
+                tx.commit().await?;
             }
             pg::SlotStatus::Confirmed => {
-                let query = query!(
-                    "BEGIN TRANSACTION
-                    UPDATE slot SET status = 'confirmed' WHERE slot =  $slot_no
-                    DELETE FROM account_write WHERE slot IN (SELECT slot FROM slot WHERE slot < $slot_no AND status = 'processed') 
-                    DELETE FROM slots WHERE slot < $slot_no AND status = 'processed'
-                    END TRANSACTION",
-                    slot_no
-                );
-                let exec_query = query.execute(client).await;
+                let tx = client.transaction().await.unwrap();
 
-                exec_ok_or_err(exec_query)?;
+                tx.query("UPDATE slot SET status = 'confirmed' WHERE slot = $1", &[&slot_no]).await.unwrap();
+                tx.query("DELETE FROM account_write WHERE slot IN (SELECT slot FROM slot WHERE slot < $1AND status = 'processed')", &[&slot_no]).await.unwrap();
+                tx.query("DELETE FROM slots WHERE slot < $1 AND status = 'processed'", &[&slot_no]).await.unwrap();
+
+                tx.commit().await?;
             }
             pg::SlotStatus::Rooted => {
-                let query = query!(
-                "BEGIN TRANSACTION
-                UPDATE slot SET status = 'finalized' WHERE slot = $slot_no
-                DELETE FROM account_write WHERE slot IN (SELECT slot FROM slot < $slot_no AND status = 'confirmed') 
-                DELETE FROM slot WHERE slot < $slot_no AND commitment = 'confirmed'
-                END TRANSACTION",
-                slot_no
-            );
+                let tx = client.transaction().await.unwrap();
 
-                let exec_query = query.execute(client).await;
-                exec_ok_or_err(exec_query)?;
+                tx.query("UPDATE slot SET status = 'finalized' WHERE slot = $1", &[&slot_no]).await.unwrap();
+                tx.query("DELETE FROM account_write WHERE slot IN (SELECT slot FROM slot < $1 AND status = 'confirmed')", &[&slot_no]).await.unwrap(); 
+                tx.query("DELETE FROM slot WHERE slot < $1 AND commitment = 'confirmed'", &[&slot_no]).await.unwrap();
+
+                tx.commit().await?;
             }
         }
 
@@ -258,7 +243,7 @@ impl SlotsProcessing {
 }
 
  fn exec_ok_or_err(
-    exec_result: Result<u64, postgres_query::Error>) -> Result<u64, postgres_query::Error> {
+    exec_result: Result<(), tokio_postgres::Error>) -> Result<(), tokio_postgres::Error> {
 
     match exec_result {
         Ok(value) => Ok(value),
@@ -425,9 +410,9 @@ pub async fn init(
 
                 let mut error_count = 0;
                 loop {
-                    let client =
+                    let mut client =
                         update_postgres_client(&mut client_opt, &postgres_slot, &config).await;
-                    if let Err(err) = slots_processing.process(client, &update).await {
+                    if let Err(err) = slots_processing.process(mut client, &update).await {
                         metric_retries.increment();
                         error_count += 1;
                         if error_count - 1 < config.retry_query_max_count {
