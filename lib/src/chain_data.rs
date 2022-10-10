@@ -28,6 +28,7 @@ pub struct AccountData {
 ///
 /// - use account() to retrieve the current best data for an account.
 /// - update_from_snapshot() and update_from_websocket() update the state for new messages
+#[derive(Debug, Default)]
 pub struct ChainData {
     /// only slots >= newest_rooted_slot are retained
     slots: HashMap<u64, SlotData>,
@@ -38,15 +39,6 @@ pub struct ChainData {
 }
 
 impl ChainData {
-    pub fn new() -> Self {
-        Self {
-            slots: HashMap::new(),
-            accounts: HashMap::new(),
-            newest_rooted_slot: 0,
-            newest_processed_slot: 0,
-        }
-    }
-
     pub fn update_slot(&mut self, new_slot: SlotData) {
         let new_processed_head = new_slot.slot > self.newest_processed_slot;
         if new_processed_head {
@@ -175,7 +167,7 @@ impl ChainData {
                     .iter()
                     .rev()
                     .find(|w| self.is_account_write_live(w))?;
-                Some((pubkey.clone(), latest_good_write.clone()))
+                Some((*pubkey, latest_good_write.clone()))
             })
             .collect()
     }
@@ -184,10 +176,10 @@ impl ChainData {
     pub fn account<'a>(&'a self, pubkey: &Pubkey) -> anyhow::Result<&'a AccountData> {
         self.accounts
             .get(pubkey)
-            .ok_or(anyhow::anyhow!("account {} not found", pubkey))?
+            .ok_or_else(|| anyhow::anyhow!("account {} not found", pubkey))?
             .iter()
             .rev()
             .find(|w| self.is_account_write_live(w))
-            .ok_or(anyhow::anyhow!("account {} has no live data", pubkey))
+            .ok_or_else(|| anyhow::anyhow!("account {} has no live data", pubkey))
     }
 }

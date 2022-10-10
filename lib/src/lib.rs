@@ -44,7 +44,7 @@ impl AccountWrite {
     fn from(pubkey: Pubkey, slot: u64, write_version: u64, account: Account) -> AccountWrite {
         AccountWrite {
             pubkey,
-            slot: slot,
+            slot,
             write_version,
             lamports: account.lamports,
             owner: account.owner,

@@ -187,7 +187,7 @@ impl Slots {
     }
 }
 
-fn make_cleanup_steps(tables: &Vec<String>) -> HashMap<String, String> {
+fn make_cleanup_steps(tables: &[String]) -> HashMap<String, String> {
     let mut steps = HashMap::<String, String>::new();
 
     // Delete all account writes that came before the newest rooted slot except
@@ -422,12 +422,12 @@ pub async fn init(
                     let mut results = futures::future::join_all(
                         write_batch
                             .iter()
-                            .map(|write| process_account_write(client, &write, &account_tables_c)),
+                            .map(|write| process_account_write(client, write, &account_tables_c)),
                     )
                     .await;
                     let mut iter = results.iter();
                     write_batch.retain(|_| iter.next().unwrap().is_err());
-                    if write_batch.len() > 0 {
+                    if !write_batch.is_empty() {
                         metric_retries.add(write_batch.len() as u64);
                         error_count += 1;
                         if error_count - 1 < config.retry_query_max_count {

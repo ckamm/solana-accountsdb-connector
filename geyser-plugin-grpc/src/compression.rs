@@ -11,8 +11,10 @@ pub fn zstd_decompress(data: &[u8], uncompressed: &mut Vec<u8>) -> Result<usize,
     decoder.read_to_end(uncompressed)
 }
 
+#[cfg(tests)]
 pub(crate) mod tests {
     use super::*;
+
     #[test]
     fn test_zstd_compression() {
         let data = vec![100; 256]; //sample data, 256 bytes of val 100.

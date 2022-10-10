@@ -144,7 +144,7 @@ async fn feed_data_geyser(
         tokio::select! {
             update = update_stream.next() => {
                 use geyser_proto::{update::UpdateOneof, slot_update::Status};
-                let mut update = update.ok_or(anyhow::anyhow!("geyser plugin has closed the stream"))??;
+                let mut update = update.ok_or_else(|| anyhow::anyhow!("geyser plugin has closed the stream"))??;
                 match update.update_oneof.as_mut().expect("invalid grpc") {
                     UpdateOneof::SubscribeResponse(subscribe_response) => {
                         first_full_slot = subscribe_response.highest_write_slot + 1;

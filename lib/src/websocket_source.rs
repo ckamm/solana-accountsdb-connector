@@ -22,9 +22,9 @@ use std::{
 use crate::{AccountWrite, AnyhowWrap, SlotStatus, SlotUpdate, SourceConfig};
 
 enum WebsocketMessage {
-    SingleUpdate(Response<RpcKeyedAccount>),
-    SnapshotUpdate(Response<Vec<RpcKeyedAccount>>),
-    SlotUpdate(Arc<solana_client::rpc_response::SlotUpdate>),
+    Single(Response<RpcKeyedAccount>),
+    Snapshot(Response<Vec<RpcKeyedAccount>>),
+    Slot(Arc<solana_client::rpc_response::SlotUpdate>),
 }
 
 // TODO: the reconnecting should be part of this
@@ -78,7 +78,7 @@ async fn feed_data(
                 .map_err_anyhow()?;
             if let OptionalContext::Context(account_snapshot_response) = account_snapshot {
                 sender
-                    .send(WebsocketMessage::SnapshotUpdate(account_snapshot_response))
+                    .send(WebsocketMessage::Snapshot(account_snapshot_response))
                     .await
                     .expect("sending must succeed");
             }
@@ -89,7 +89,7 @@ async fn feed_data(
             account = update_sub.next() => {
                 match account {
                     Some(account) => {
-                        sender.send(WebsocketMessage::SingleUpdate(account.map_err_anyhow()?)).await.expect("sending must succeed");
+                        sender.send(WebsocketMessage::Single(account.map_err_anyhow()?)).await.expect("sending must succeed");
                     },
                     None => {
                         warn!("account stream closed");
@@ -100,7 +100,7 @@ async fn feed_data(
             slot_update = slot_sub.next() => {
                 match slot_update {
                     Some(slot_update) => {
-                        sender.send(WebsocketMessage::SlotUpdate(slot_update.map_err_anyhow()?)).await.expect("sending must succeed");
+                        sender.send(WebsocketMessage::Slot(slot_update.map_err_anyhow()?)).await.expect("sending must succeed");
                     },
                     None => {
                         warn!("slot update stream closed");
@@ -143,7 +143,7 @@ pub async fn process_events(
         info!("got update message");
 
         match update {
-            WebsocketMessage::SingleUpdate(update) => {
+            WebsocketMessage::Single(update) => {
                 info!("single update");
                 let account: Account = update.value.account.decode().unwrap();
                 let pubkey = Pubkey::from_str(&update.value.pubkey).unwrap();
@@ -152,7 +152,7 @@ pub async fn process_events(
                     .await
                     .expect("send success");
             }
-            WebsocketMessage::SnapshotUpdate(update) => {
+            WebsocketMessage::Snapshot(update) => {
                 info!("snapshot update");
                 for keyed_account in update.value {
                     let account: Account = keyed_account.account.decode().unwrap();
@@ -163,7 +163,7 @@ pub async fn process_events(
                         .expect("send success");
                 }
             }
-            WebsocketMessage::SlotUpdate(update) => {
+            WebsocketMessage::Slot(update) => {
                 info!("slot update");
                 let message = match *update {
                     solana_client::rpc_response::SlotUpdate::CreatedBank {

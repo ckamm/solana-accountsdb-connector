@@ -20,8 +20,8 @@ pub mod geyser_service {
         pub sender: broadcast::Sender<Update>,
     }
 
-    impl Service {
-        pub fn new() -> Self {
+    impl Default for Service {
+        fn default() -> Self {
             let (tx, _) = broadcast::channel(100);
             Self { sender: tx }
         }
@@ -53,7 +53,7 @@ pub mod geyser_service {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
-    let service = geyser_service::Service::new();
+    let service = geyser_service::Service::default();
     let sender = service.sender.clone();
     let svc = geyser_proto::accounts_db_server::AccountsDbServer::new(service);
 
