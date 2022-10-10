@@ -5,7 +5,10 @@ use tonic::transport::Server;
 pub mod geyser_proto {
     tonic::include_proto!("accountsdb");
 }
-use geyser_proto::{update::UpdateOneof, SlotUpdate, SubscribeRequest, Update};
+use geyser_proto::{
+    update::UpdateOneof, SlotUpdate, SubscribeRequest, Update, UpdateAccountsSelectorRequest,
+    UpdateAccountsSelectorResponse,
+};
 
 pub mod geyser_service {
     use super::*;
@@ -45,6 +48,16 @@ pub mod geyser_service {
                 }
             });
             Ok(Response::new(ReceiverStream::new(rx)))
+        }
+
+        async fn update_accounts_selector(
+            &self,
+            _request: Request<UpdateAccountsSelectorRequest>,
+        ) -> Result<Response<geyser_proto::UpdateAccountsSelectorResponse>, Status> {
+            Ok(Response::new(UpdateAccountsSelectorResponse {
+                is_ok: true,
+                error_message: String::new(),
+            }))
         }
     }
 }

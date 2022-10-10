@@ -1,48 +1,45 @@
 use {log::*, std::collections::HashSet};
 
 #[derive(Debug)]
-pub(crate) struct AccountsSelector {
+pub struct AccountsSelector {
     pub accounts: HashSet<Vec<u8>>,
     pub owners: HashSet<Vec<u8>>,
     pub select_all_accounts: bool,
 }
 
-impl AccountsSelector {
-    pub fn default() -> Self {
-        AccountsSelector {
+impl Default for AccountsSelector {
+    fn default() -> Self {
+        Self {
             accounts: HashSet::default(),
             owners: HashSet::default(),
             select_all_accounts: true,
         }
     }
+}
 
-    pub fn new(accounts: &[String], owners: &[String]) -> Self {
+impl AccountsSelector {
+    pub fn new(accounts: &[&str], owners: &[&str]) -> anyhow::Result<Self> {
         info!(
             "Creating AccountsSelector from accounts: {:?}, owners: {:?}",
             accounts, owners
         );
 
-        let select_all_accounts = accounts.iter().any(|key| key == "*");
+        let select_all_accounts = accounts.iter().any(|key| *key == "*");
         if select_all_accounts {
-            return AccountsSelector {
-                accounts: HashSet::default(),
-                owners: HashSet::default(),
-                select_all_accounts,
-            };
+            return Ok(Self::default());
         }
-        let accounts = accounts
-            .iter()
-            .map(|key| bs58::decode(key).into_vec().unwrap())
-            .collect();
-        let owners = owners
-            .iter()
-            .map(|key| bs58::decode(key).into_vec().unwrap())
-            .collect();
-        AccountsSelector {
-            accounts,
-            owners,
-            select_all_accounts,
-        }
+
+        Ok(AccountsSelector {
+            accounts: accounts
+                .iter()
+                .map(|key| bs58::decode(key).into_vec())
+                .collect::<Result<_, _>>()?,
+            owners: owners
+                .iter()
+                .map(|key| bs58::decode(key).into_vec())
+                .collect::<Result<_, _>>()?,
+            select_all_accounts: false,
+        })
     }
 
     pub fn is_account_selected(&self, account: &[u8], owner: &[u8]) -> bool {
@@ -56,14 +53,8 @@ pub(crate) mod tests {
 
     #[test]
     fn test_create_accounts_selector() {
-        AccountsSelector::new(
-            &["9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin".to_string()],
-            &[],
-        );
+        AccountsSelector::new(&["9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"], &[]).unwrap();
 
-        AccountsSelector::new(
-            &[],
-            &["9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin".to_string()],
-        );
+        AccountsSelector::new(&[], &["9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"]).unwrap();
     }
 }

@@ -13,6 +13,7 @@ name = "test-server"
 path = "src/test_server.rs"
 
 [dependencies]
+anyhow = "1"
 bs58 = "0.4.0"
 log = "0.4.14"
 serde = "1.0.130"
@@ -35,6 +36,7 @@ async-stream = "0.2"
 rand = "0.8"
 zstd = "0.11.2"
 zstd-safe = "5.0.2"
+
 [build-dependencies]
 tonic-build = { version = "0.6", features = ["compression"] }
 

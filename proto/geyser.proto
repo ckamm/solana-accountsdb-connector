@@ -8,6 +8,7 @@ package accountsdb;
 
 service AccountsDb {
   rpc Subscribe(SubscribeRequest) returns (stream Update) {}
+  rpc UpdateAccountsSelector(UpdateAccountsSelectorRequest) returns (UpdateAccountsSelectorResponse) {}
 }
 
 message SubscribeRequest {
@@ -55,4 +56,13 @@ message Ping {
 
 message SubscribeResponse {
   uint64 highest_write_slot = 1;
+}
+
+message UpdateAccountsSelectorRequest {
+  string config = 1;
+}
+
+message UpdateAccountsSelectorResponse {
+  bool is_ok = 1;
+  string error_message = 2;
 }

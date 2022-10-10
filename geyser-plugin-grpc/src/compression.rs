@@ -11,7 +11,7 @@ pub fn zstd_decompress(data: &[u8], uncompressed: &mut Vec<u8>) -> Result<usize,
     decoder.read_to_end(uncompressed)
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 pub(crate) mod tests {
     use super::*;
 

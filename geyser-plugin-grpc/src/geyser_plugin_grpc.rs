@@ -1,11 +1,10 @@
-use crate::compression::zstd_compress;
-
 use {
-    crate::accounts_selector::AccountsSelector,
+    crate::{accounts_selector::AccountsSelector, compression::zstd_compress},
     bs58,
     geyser_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
-        SlotUpdate, SubscribeRequest, SubscribeResponse, Update,
+        SlotUpdate, SubscribeRequest, SubscribeResponse, Update, UpdateAccountsSelectorRequest,
+        UpdateAccountsSelectorResponse,
     },
     log::*,
     serde_derive::Deserialize,
@@ -51,15 +50,21 @@ pub mod geyser_service {
         pub sender: broadcast::Sender<Update>,
         pub config: ServiceConfig,
         pub highest_write_slot: Arc<AtomicU64>,
+        pub accounts_selector: Arc<RwLock<AccountsSelector>>,
     }
 
     impl Service {
-        pub fn new(config: ServiceConfig, highest_write_slot: Arc<AtomicU64>) -> Self {
+        pub fn new(
+            config: ServiceConfig,
+            highest_write_slot: Arc<AtomicU64>,
+            accounts_selector: Arc<RwLock<AccountsSelector>>,
+        ) -> Self {
             let (tx, _) = broadcast::channel(config.broadcast_buffer_size);
             Self {
                 sender: tx,
                 config,
                 highest_write_slot,
+                accounts_selector,
             }
         }
     }
@@ -103,6 +108,30 @@ pub mod geyser_service {
             });
             Ok(Response::new(ReceiverStream::new(rx)))
         }
+
+        async fn update_accounts_selector(
+            &self,
+            request: Request<UpdateAccountsSelectorRequest>,
+        ) -> Result<Response<geyser_proto::UpdateAccountsSelectorResponse>, Status> {
+            let (is_ok, error_message) =
+                match serde_json::from_str::<serde_json::Value>(&request.get_ref().config)
+                    .map_err(|error| error.to_string())
+                    .and_then(|config| {
+                        Plugin::create_accounts_selector_from_config(&config)
+                            .map_err(|error| error.to_string())
+                    }) {
+                    Ok(accounts_selector_new) => {
+                        *self.accounts_selector.write().unwrap() = accounts_selector_new;
+                        (true, String::new())
+                    }
+                    Err(error) => (false, error),
+                };
+
+            Ok(Response::new(UpdateAccountsSelectorResponse {
+                is_ok,
+                error_message,
+            }))
+        }
     }
 }
 
@@ -110,7 +139,7 @@ pub struct PluginData {
     runtime: Option<tokio::runtime::Runtime>,
     server_broadcast: broadcast::Sender<Update>,
     server_exit_sender: Option<broadcast::Sender<()>>,
-    accounts_selector: AccountsSelector,
+    accounts_selector: Arc<RwLock<AccountsSelector>>,
 
     /// Largest slot that an account write was processed for
     highest_write_slot: Arc<AtomicU64>,
@@ -169,7 +198,9 @@ impl GeyserPlugin for Plugin {
         file.read_to_string(&mut contents)?;
 
         let result: serde_json::Value = serde_json::from_str(&contents).unwrap();
-        let accounts_selector = Self::create_accounts_selector_from_config(&result);
+        let accounts_selector = Arc::new(RwLock::new(
+            Self::create_accounts_selector_from_config(&result["accounts_selector"]).unwrap(),
+        ));
 
         let config: PluginConfig = serde_json::from_str(&contents).map_err(|err| {
             GeyserPluginError::ConfigFileReadError {
@@ -189,8 +220,11 @@ impl GeyserPlugin for Plugin {
                 })?;
 
         let highest_write_slot = Arc::new(AtomicU64::new(0));
-        let service =
-            geyser_service::Service::new(config.service_config, highest_write_slot.clone());
+        let service = geyser_service::Service::new(
+            config.service_config,
+            highest_write_slot.clone(),
+            Arc::clone(&accounts_selector),
+        );
 
         let (server_exit_sender, mut server_exit_receiver) = broadcast::channel::<()>(1);
         let server_broadcast = service.sender.clone();
@@ -271,6 +305,8 @@ impl GeyserPlugin for Plugin {
                 // that were previously selected (to catch closures and account reuse)
                 let is_selected = data
                     .accounts_selector
+                    .read()
+                    .unwrap()
                     .is_account_selected(account.pubkey, account.owner);
                 let previously_selected = {
                     let read = data.active_accounts.read().unwrap();
@@ -356,36 +392,46 @@ impl GeyserPlugin for Plugin {
 }
 
 impl Plugin {
-    fn create_accounts_selector_from_config(config: &serde_json::Value) -> AccountsSelector {
-        let accounts_selector = &config["accounts_selector"];
-
-        if accounts_selector.is_null() {
+    pub fn create_accounts_selector_from_config(
+        accounts_selector: &serde_json::Value,
+    ) -> anyhow::Result<AccountsSelector> {
+        Ok(if accounts_selector.is_null() {
             AccountsSelector::default()
         } else {
             let accounts = &accounts_selector["accounts"];
-            let accounts: Vec<String> = if accounts.is_array() {
-                accounts
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|val| val.as_str().unwrap().to_string())
-                    .collect()
-            } else {
-                Vec::default()
-            };
+            let accounts = accounts
+                .as_array()
+                .map(|accounts| {
+                    accounts
+                        .iter()
+                        .map(|account| {
+                            account.as_str().ok_or_else(|| {
+                                anyhow::anyhow!("Expected `account` Pubkey as String")
+                            })
+                        })
+                        .collect::<Result<Vec<&str>, _>>()
+                })
+                .transpose()?
+                .unwrap_or_default();
+
             let owners = &accounts_selector["owners"];
-            let owners: Vec<String> = if owners.is_array() {
-                owners
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|val| val.as_str().unwrap().to_string())
-                    .collect()
-            } else {
-                Vec::default()
-            };
-            AccountsSelector::new(&accounts, &owners)
-        }
+            let owners = owners
+                .as_array()
+                .map(|owners| {
+                    owners
+                        .iter()
+                        .map(|account| {
+                            account
+                                .as_str()
+                                .ok_or_else(|| anyhow::anyhow!("Expected `owner` Pubkey as String"))
+                        })
+                        .collect::<Result<Vec<&str>, _>>()
+                })
+                .transpose()?
+                .unwrap_or_default();
+
+            AccountsSelector::new(&accounts, &owners)?
+        })
     }
 }
 
@@ -411,6 +457,6 @@ pub(crate) mod tests {
         }}";
 
         let config: serde_json::Value = serde_json::from_str(config).unwrap();
-        Plugin::create_accounts_selector_from_config(&config);
+        Plugin::create_accounts_selector_from_config(&config["accounts_selector"]).unwrap();
     }
 }
