@@ -20,10 +20,10 @@ serde = "1.0.130"
 serde_derive = "1.0.103"
 serde_json = "1.0.67"
 
-solana-geyser-plugin-interface = "=1.10.39"
-solana-logger = "=1.10.39"
-solana-metrics = "=1.10.39"
-solana-sdk = "=1.10.39"
+solana-geyser-plugin-interface = "=1.10.40"
+solana-logger = "=1.10.40"
+solana-metrics = "=1.10.40"
+solana-sdk = "=1.10.40"
 
 tonic = { version = "0.6", features = ["compression"] }
 prost = "0.9"
