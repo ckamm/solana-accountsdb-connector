@@ -1,6 +1,12 @@
 use {
-    crate::{accounts_selector::AccountsSelector, compression::zstd_compress},
-    bs58,
+    crate::{
+        accounts_selector::AccountsSelector,
+        compression::zstd_compress,
+        prom::{
+            PrometheusConfig, PrometheusService, BROADCAST_ACCOUNTS_TOTAL, BROADCAST_SLOTS_TOTAL,
+            SLOTS_LAST_PROCESSED,
+        },
+    },
     geyser_proto::{
         slot_update::Status as SlotUpdateStatus, update::UpdateOneof, AccountWrite, Ping,
         SlotUpdate, SubscribeRequest, SubscribeResponse, Update, UpdateAccountsSelectorRequest,
@@ -8,7 +14,6 @@ use {
     },
     log::*,
     serde_derive::Deserialize,
-    serde_json,
     solana_geyser_plugin_interface::geyser_plugin_interface::{
         GeyserPlugin, GeyserPluginError, ReplicaAccountInfoVersions, Result as PluginResult,
         SlotStatus,
@@ -136,9 +141,10 @@ pub mod geyser_service {
 }
 
 pub struct PluginData {
-    runtime: Option<tokio::runtime::Runtime>,
+    runtime: tokio::runtime::Runtime,
+    prometheus: PrometheusService,
     server_broadcast: broadcast::Sender<Update>,
-    server_exit_sender: Option<broadcast::Sender<()>>,
+    server_exit_sender: broadcast::Sender<()>,
     accounts_selector: Arc<RwLock<AccountsSelector>>,
 
     /// Largest slot that an account write was processed for
@@ -165,10 +171,13 @@ impl std::fmt::Debug for Plugin {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PluginConfig {
     pub bind_address: String,
     pub service_config: geyser_service::ServiceConfig,
     pub zstd_compression: bool,
+    #[serde(default)]
+    pub prometheus: Option<PrometheusConfig>,
 }
 
 impl PluginData {
@@ -211,6 +220,9 @@ impl GeyserPlugin for Plugin {
             }
         })?;
 
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let prometheus = PrometheusService::new(&runtime, config.prometheus);
+
         let addr =
             config
                 .bind_address
@@ -232,7 +244,6 @@ impl GeyserPlugin for Plugin {
         let server = geyser_proto::accounts_db_server::AccountsDbServer::new(service)
             .accept_gzip()
             .send_gzip();
-        let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.spawn(Server::builder().add_service(server).serve_with_shutdown(
             addr,
             async move {
@@ -256,9 +267,10 @@ impl GeyserPlugin for Plugin {
         });
 
         self.data = Some(PluginData {
-            runtime: Some(runtime),
+            runtime,
+            prometheus,
             server_broadcast,
-            server_exit_sender: Some(server_exit_sender),
+            server_exit_sender,
             accounts_selector,
             highest_write_slot,
             active_accounts: RwLock::new(HashSet::new()),
@@ -271,17 +283,13 @@ impl GeyserPlugin for Plugin {
     fn on_unload(&mut self) {
         info!("Unloading plugin: {:?}", self.name());
 
-        let mut data = self.data.take().expect("plugin must be initialized");
+        let data = self.data.take().expect("plugin must be initialized");
+
+        data.prometheus.shutdown();
         data.server_exit_sender
-            .take()
-            .expect("on_unload can only be called once")
             .send(())
             .expect("sending grpc server termination should succeed");
-
-        data.runtime
-            .take()
-            .expect("must exist")
-            .shutdown_background();
+        data.runtime.shutdown_background();
     }
 
     fn update_account(
@@ -358,8 +366,11 @@ impl GeyserPlugin for Plugin {
                     data: account_data,
                     is_selected,
                 }));
+
+                BROADCAST_ACCOUNTS_TOTAL.inc();
             }
         }
+
         Ok(())
     }
 
@@ -372,16 +383,22 @@ impl GeyserPlugin for Plugin {
         let data = self.data.as_ref().expect("plugin must be initialized");
         debug!("Updating slot {:?} at with status {:?}", slot, status);
 
-        let status = match status {
-            SlotStatus::Processed => SlotUpdateStatus::Processed,
-            SlotStatus::Confirmed => SlotUpdateStatus::Confirmed,
-            SlotStatus::Rooted => SlotUpdateStatus::Rooted,
+        let (status, label) = match status {
+            SlotStatus::Processed => (SlotUpdateStatus::Processed, "processed"),
+            SlotStatus::Confirmed => (SlotUpdateStatus::Confirmed, "confirmed"),
+            SlotStatus::Rooted => (SlotUpdateStatus::Rooted, "rooted"),
         };
+
         data.broadcast(UpdateOneof::SlotUpdate(SlotUpdate {
             slot,
             parent,
             status: status as i32,
         }));
+
+        SLOTS_LAST_PROCESSED
+            .with_label_values(&[label])
+            .set(slot as i64);
+        BROADCAST_SLOTS_TOTAL.with_label_values(&[label]).inc();
 
         Ok(())
     }
