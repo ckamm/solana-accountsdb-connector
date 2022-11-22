@@ -11,9 +11,9 @@ env:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Set rust version
         run: |
@@ -60,4 +60,3 @@ jobs:
             rust ${{ env.RUST_STABLE }}
           files: |
             ${{ env.GEYSER_PLUGIN_NAME }}-release-*
-
